@@ -1,0 +1,3 @@
+prolab.tos-coordinates, git@github.com:proactivity-lab/tos-coordinates.git
+prolab.tos-rtc,         git@github.com:proactivity-lab/tos-rtc.git
+thinnect.tos-groundlib, git@github.com:thinnect/tos-groundlib.git
