@@ -47,6 +47,9 @@ implementation {
 	components RandomC;
 	DeviceAnnouncementP.Random -> RandomC;
 
+	components CrcC;
+	DeviceAnnouncementP.Crc -> CrcC;
+
 	components GlobalPoolC;
 	DeviceAnnouncementP.MessagePool -> GlobalPoolC;
 

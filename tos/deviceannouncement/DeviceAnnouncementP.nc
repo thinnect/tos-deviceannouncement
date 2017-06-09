@@ -28,6 +28,7 @@ generic module DeviceAnnouncementP(uint8_t ifaces, uint8_t total_features) {
 
 		interface Timer<TMilli>;
 		interface Random;
+		interface Crc;
 
 		interface Get<uint32_t> as BootNumber;
 		interface Get<uint32_t> as Lifetime;
@@ -72,6 +73,18 @@ implementation {
 		call Timer.startOneShot(randomperiod(0));
 	}
 
+	uint32_t featureListHash() { // Really simple hashing for now
+		uint16_t hash = 0;
+		uint8_t ftrs;
+		for(ftrs=0;ftrs<total_features;ftrs++) {
+			uuid_t uuid;
+			if(call DeviceFeatureUuid128.get[ftrs](&uuid) == SUCCESS) {
+				hash = call Crc.seededCrc16(hash, &uuid, sizeof(uuid));
+			}
+		}
+		return (((uint32_t)hash)<<16) + hash;
+	}
+
 	error_t announce(uint8_t iface, am_addr_t destination) {
 		if(!m_busy) {
 			message_t* msg = call MessagePool.get();
@@ -102,7 +115,7 @@ implementation {
 					anc->elevation = geo.elevation;
 
 					anc->ident_timestamp = IDENT_TIMESTAMP;
-					anc->feature_list_hash = 0xFEDCBA98;
+					anc->feature_list_hash = featureListHash();
 
 					err = call AMSend.send[iface](destination, msg, sizeof(device_announcement_t));
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
