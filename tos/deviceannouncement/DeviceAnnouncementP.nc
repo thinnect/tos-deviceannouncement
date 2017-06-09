@@ -84,8 +84,14 @@ implementation {
 					coordinates_geo_t geo;
 
 					anc->header = DEVA_ANNOUNCEMENT;
+					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					memcpy(anc->guid, guid.data, sizeof(anc->guid));
 					anc->boot_number = call BootNumber.get();
+
+					anc->boot_time = m_boot_time;
+					anc->uptime = call Uptime.get();
+					anc->lifetime = call Lifetime.get();
+					anc->announcement = m_announcements;
 
 					call ApplicationUuid128.get(&uuid);
 					hton_uuid(&(anc->uuid), &uuid);
@@ -95,12 +101,7 @@ implementation {
 					anc->longitude = geo.longitude;
 					anc->elevation = geo.elevation;
 
-					anc->boot_number = call BootNumber.get();
-
-					anc->boot_time = m_boot_time;
-					anc->uptime = call Uptime.get();
-					anc->lifetime = call Lifetime.get();
-					anc->announcement = m_announcements;
+					anc->ident_timestamp = IDENT_TIMESTAMP;
 
 					err = call AMSend.send[iface](destination, msg, sizeof(device_announcement_t));
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
