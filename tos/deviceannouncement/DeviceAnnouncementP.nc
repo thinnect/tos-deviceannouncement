@@ -102,6 +102,7 @@ implementation {
 					anc->elevation = geo.elevation;
 
 					anc->ident_timestamp = IDENT_TIMESTAMP;
+					anc->feature_list_hash = 0xFEDCBA98;
 
 					err = call AMSend.send[iface](destination, msg, sizeof(device_announcement_t));
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
@@ -128,6 +129,7 @@ implementation {
 					uuid_t uuid;
 
 					anc->header = DEVA_DESCRIPTION;
+					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					memcpy(anc->guid, guid.data, sizeof(anc->guid));
 					anc->boot_number = call BootNumber.get();
 
@@ -171,6 +173,7 @@ implementation {
 					uint8_t ftrs = 0;
 
 					anc->header = DEVA_FEATURES;
+					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					memcpy(anc->guid, guid.data, sizeof(anc->guid));
 					anc->boot_number = call BootNumber.get();
 
@@ -185,6 +188,8 @@ implementation {
 							memset(&(anc->features[ftrs]), 0xFF, sizeof(nx_uuid_t)); // indicate problem
 						}
 					}
+
+					debugb1("ftrs %u total %u", anc, sizeof(device_features_t)+ftrs*sizeof(nx_uuid_t), ftrs, total_features);
 
 					err = call AMSend.send[iface](destination, msg, sizeof(device_features_t) + ftrs*sizeof(nx_uuid_t));
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
