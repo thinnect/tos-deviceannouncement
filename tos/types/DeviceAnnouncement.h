@@ -46,11 +46,11 @@ typedef nx_struct device_announcement {
 	nx_int32_t longitude;          // 1E6
 	nx_int32_t elevation;          // centimeters
 
-	nx_uint32_t ident_timestamp;   // Compilation time, unsigned unix timestamp, seconds
+	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
 
 	nx_uint32_t feature_list_hash; // hash of feature UUIDs
 } device_announcement_t;
-// 2+8+4+20+16+12+8=70
+// 2+8+4+20+16+12+8+4=74
 
 typedef nx_struct device_request {
 	nx_uint8_t header;             // 0x10 or 0x11
@@ -73,12 +73,12 @@ typedef nx_struct device_description {
 	nx_uuid_t manufacturer;        // Manufacturer UUID
 	nx_time64_t production;        // When the device was produced, unix timestamp, seconds
 
-	nx_uint32_t ident_timestamp;   // Compilation time, unsigned unix timestamp, seconds
+	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
 	nx_uint8_t  sw_major_version;
 	nx_uint8_t  sw_minor_version;
 	nx_uint8_t  sw_patch_version;
 } device_description_t;
-// 2+8+16+16+4+4+4+3=57
+// 2+8+16+16+4+4+8+3=61
 
 typedef nx_struct device_features {
 	nx_uint8_t header;             // 00
@@ -90,7 +90,7 @@ typedef nx_struct device_features {
 	nx_uint8_t offset;             // Feature index offset
 	nx_uuid_t features[];
 } device_features_t;
-// 2+8+2+0*16=12 -> 2+8+2+1*16=28 -> 2+8+2+5*16=92
+// 2+8+4+2+0*16=12 -> 2+8+4+2+1*16=28 -> 2+8+4+2+6*16=108
 
 #define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID unique("DeviceAnnouncementCommunicationsInterface")
 #define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_COUNT uniqueCount("DeviceAnnouncementCommunicationsInterface")
