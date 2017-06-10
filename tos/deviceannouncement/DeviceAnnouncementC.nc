@@ -7,6 +7,11 @@
 #include "DeviceAnnouncement.h"
 configuration DeviceAnnouncementC {
 	provides interface DeviceAnnouncement;
+	uses {
+		interface AMSend[uint8_t iface];
+		interface AMPacket[uint8_t iface];
+		interface Receive[uint8_t iface];
+	}
 }
 implementation {
 
@@ -53,11 +58,15 @@ implementation {
 	components GlobalPoolC;
 	DeviceAnnouncementP.MessagePool -> GlobalPoolC;
 
+	DeviceAnnouncementP.AMSend = AMSend;
+	DeviceAnnouncementP.AMPacket = AMPacket;
+	DeviceAnnouncementP.Receive = Receive;
+
 	components new AMSenderC(AMID_DEVICE_ANNOUNCEMENT);
-	DeviceAnnouncementP.AMSend[DA_ANNOUNCEMENT_INTERFACE_ID] -> AMSenderC;
-	DeviceAnnouncementP.AMPacket[DA_ANNOUNCEMENT_INTERFACE_ID] -> AMSenderC;
+	DeviceAnnouncementP.AMSend[DEVA_ANNOUNCEMENT_INTERFACE_ID] -> AMSenderC;
+	DeviceAnnouncementP.AMPacket[DEVA_ANNOUNCEMENT_INTERFACE_ID] -> AMSenderC;
 
 	components new AMReceiverC(AMID_DEVICE_ANNOUNCEMENT);
-	DeviceAnnouncementP.Receive[DA_ANNOUNCEMENT_INTERFACE_ID] -> AMReceiverC;
+	DeviceAnnouncementP.Receive[DEVA_ANNOUNCEMENT_INTERFACE_ID] -> AMReceiverC;
 
 }

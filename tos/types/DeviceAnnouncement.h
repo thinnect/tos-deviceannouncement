@@ -99,7 +99,7 @@ typedef nx_struct device_features {
 #define UQ_DEVICE_FEATURE_COUNT uniqueCount("DeviceFeatureUuidIndex")
 
 enum DeviceAnnouncementInterfaceEnum {
-	DA_ANNOUNCEMENT_INTERFACE_ID = UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID
+	DEVA_ANNOUNCEMENT_INTERFACE_ID = UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID
 };
 
 #endif // DEVICEANNOUNCEMENT_H_

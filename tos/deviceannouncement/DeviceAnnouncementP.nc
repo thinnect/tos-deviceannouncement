@@ -226,7 +226,7 @@ implementation {
 
 	event void Timer.fired() {
 		m_announcements++;
-		announce(DA_ANNOUNCEMENT_INTERFACE_ID, AM_BROADCAST_ADDR); // Currently announcements only on first interface
+		announce(DEVA_ANNOUNCEMENT_INTERFACE_ID, AM_BROADCAST_ADDR); // Currently announcements only on first interface
 		scheduleNextAnnouncement();
 	}
 
