@@ -73,6 +73,18 @@ implementation {
 		call Timer.startOneShot(randomperiod(0));
 	}
 
+	uint8_t featureCount() {
+		uint8_t ftrs = 0;
+		uint8_t i;
+		for(i=0;i<total_features;i++) {
+			uuid_t uuid;
+			if(call DeviceFeatureUuid128.get[i](&uuid) == SUCCESS) {
+				ftrs++;
+			}
+		}
+		return ftrs;
+	}
+
 	uint32_t featureListHash() { // Really simple hashing for now
 		uint16_t hash = 0;
 		uint8_t ftrs;
@@ -184,25 +196,27 @@ implementation {
 					ieee_eui64_t guid = call LocalIeeeEui64.getId();
 					uuid_t uuid;
 					uint8_t ftrs = 0;
+					uint8_t skip = 0;
 
 					anc->header = DEVA_FEATURES;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					memcpy(anc->guid, guid.data, sizeof(anc->guid));
 					anc->boot_number = call BootNumber.get();
 
-					anc->total = total_features;
+					anc->total = featureCount();
 					anc->offset = offset;
 
-					for(ftrs=0;(ftrs<space)&&(offset+ftrs<total_features);ftrs++) {
+					for(;(ftrs<space)&&(offset+skip+ftrs<total_features);) {
 						if(call DeviceFeatureUuid128.get[offset+ftrs](&uuid) == SUCCESS) {
 							hton_uuid(&(anc->features[ftrs]), &uuid);
+							ftrs++;
 						}
-						else {
-							memset(&(anc->features[ftrs]), 0xFF, sizeof(nx_uuid_t)); // indicate problem
+						else { // Feature disabled ... or problematic?
+							skip++;
 						}
 					}
 
-					debugb1("ftrs %u total %u", anc, sizeof(device_features_t)+ftrs*sizeof(nx_uuid_t), ftrs, total_features);
+					debugb1("ftrs %u total %u", anc, sizeof(device_features_t)+ftrs*sizeof(nx_uuid_t), ftrs, anc->total);
 
 					err = call AMSend.send[iface](destination, msg, sizeof(device_features_t) + ftrs*sizeof(nx_uuid_t));
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
