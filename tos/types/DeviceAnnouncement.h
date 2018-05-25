@@ -9,7 +9,8 @@
 
 #define AMID_DEVICE_ANNOUNCEMENT 0xDA
 
-#define DEVICE_ANNOUNCEMENT_VERSION 0x01
+#define DEVICE_ANNOUNCEMENT_VERSION_V1 0x01
+#define DEVICE_ANNOUNCEMENT_VERSION 0x02
 
 enum DeviceAnnouncementHeaderEnum {
 	DEVA_ANNOUNCEMENT    = 0x00,
@@ -29,7 +30,7 @@ enum DeviceAnnouncementHeaderEnum {
 	DEVA_ACKNOWLEDGEMENT = 0xAA, // Ack an announcement (when appropriate)
 };
 
-typedef nx_struct device_announcement {
+typedef nx_struct device_announcement_v1 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // Protocol version
 	nx_uint8_t guid[8];            // Device EUI64
@@ -49,8 +50,32 @@ typedef nx_struct device_announcement {
 	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
 
 	nx_uint32_t feature_list_hash; // hash of feature UUIDs
-} device_announcement_t;
+} device_announcement_v1_t;
 // 2+8+4+20+16+12+8+4=74
+
+typedef nx_struct device_announcement {
+	nx_uint8_t header;             // 00
+	nx_uint8_t version;            // 02 Protocol version
+	nx_uint8_t guid[8];            // Device EUI64
+	nx_uint32_t boot_number;       // Current boot number
+
+	nx_time64_t boot_time;         // Unix timestamp, seconds
+	nx_uint32_t uptime;            // Uptime since boot, seconds
+	nx_uint32_t lifetime;          // Total uptime since production, potentially lossy, seconds
+	nx_uint32_t announcement;      // Announcement number since boot
+
+	nx_uuid_t uuid;                // Application UUID (general feature set)
+
+	nx_uint8_t position_type;      // F - fix, G - gps, L - local, A - area. U - unknown.
+	nx_int32_t latitude;           // 1E6
+	nx_int32_t longitude;          // 1E6
+	nx_int32_t elevation;          // centimeters
+
+	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
+
+	nx_uint32_t feature_list_hash; // hash of feature UUIDs
+} device_announcement_t;
+// 2+8+4+20+16+13+8+4=75
 
 typedef nx_struct device_request {
 	nx_uint8_t header;             // 0x10 or 0x11

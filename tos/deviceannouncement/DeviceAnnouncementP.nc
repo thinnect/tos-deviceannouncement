@@ -98,39 +98,80 @@ implementation {
 		return (((uint32_t)hash)<<16) + hash;
 	}
 
-	error_t announce(uint8_t iface, am_addr_t destination) {
+	error_t announce(uint8_t iface, uint8_t version, am_addr_t destination) {
 		if(!m_busy) {
 			message_t* msg = call MessagePool.get();
 			if(msg != NULL) {
-				device_announcement_t* anc = (device_announcement_t*)call AMSend.getPayload[iface](msg, sizeof(device_announcement_t));
-				if(anc != NULL) {
-					error_t err;
-					ieee_eui64_t guid = call LocalIeeeEui64.getId();
-					uuid_t uuid;
-					coordinates_geo_t geo;
+				uint8_t length = 0;
+				if(version == 1) {
+					device_announcement_v1_t* anc = (device_announcement_v1_t*)call AMSend.getPayload[iface](msg, sizeof(device_announcement_v1_t));
+					if(anc != NULL) {
+						ieee_eui64_t guid = call LocalIeeeEui64.getId();
+						uuid_t uuid;
+						coordinates_geo_t geo;
 
-					anc->header = DEVA_ANNOUNCEMENT;
-					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
-					memcpy(anc->guid, guid.data, sizeof(anc->guid));
-					anc->boot_number = call BootNumber.get();
+						anc->header = DEVA_ANNOUNCEMENT;
+						anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+						memcpy(anc->guid, guid.data, sizeof(anc->guid));
+						anc->boot_number = call BootNumber.get();
 
-					anc->boot_time = m_boot_time;
-					anc->uptime = call Uptime.get();
-					anc->lifetime = call Lifetime.get();
-					anc->announcement = m_announcements;
+						anc->boot_time = m_boot_time;
+						anc->uptime = call Uptime.get();
+						anc->lifetime = call Lifetime.get();
+						anc->announcement = m_announcements;
 
-					call ApplicationUuid128.get(&uuid);
-					hton_uuid(&(anc->uuid), &uuid);
+						call ApplicationUuid128.get(&uuid);
+						hton_uuid(&(anc->uuid), &uuid);
 
-					call GetGeo.get(&geo);
-					anc->latitude = geo.latitude;
-					anc->longitude = geo.longitude;
-					anc->elevation = geo.elevation;
+						call GetGeo.get(&geo);
+						anc->latitude = geo.latitude;
+						anc->longitude = geo.longitude;
+						anc->elevation = geo.elevation;
 
-					anc->ident_timestamp = IDENT_TIMESTAMP;
-					anc->feature_list_hash = featureListHash();
+						anc->ident_timestamp = IDENT_TIMESTAMP;
+						anc->feature_list_hash = featureListHash();
 
-					err = call AMSend.send[iface](destination, msg, sizeof(device_announcement_t));
+						length = sizeof(device_announcement_v1_t);
+					}
+				}
+				else if(version == DEVICE_ANNOUNCEMENT_VERSION) {
+					device_announcement_t* anc = (device_announcement_t*)call AMSend.getPayload[iface](msg, sizeof(device_announcement_t));
+					if(anc != NULL) {
+						ieee_eui64_t guid = call LocalIeeeEui64.getId();
+						uuid_t uuid;
+						coordinates_geo_t geo;
+
+						anc->header = DEVA_ANNOUNCEMENT;
+						anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+						memcpy(anc->guid, guid.data, sizeof(anc->guid));
+						anc->boot_number = call BootNumber.get();
+
+						anc->boot_time = m_boot_time;
+						anc->uptime = call Uptime.get();
+						anc->lifetime = call Lifetime.get();
+						anc->announcement = m_announcements;
+
+						call ApplicationUuid128.get(&uuid);
+						hton_uuid(&(anc->uuid), &uuid);
+
+						call GetGeo.get(&geo);
+						anc->position_type = geo.type;
+						anc->latitude = geo.latitude;
+						anc->longitude = geo.longitude;
+						anc->elevation = geo.elevation;
+
+						anc->ident_timestamp = IDENT_TIMESTAMP;
+						anc->feature_list_hash = featureListHash();
+
+						length = sizeof(device_announcement_t);
+					}
+				}
+				else {
+					err1("v%d", version);
+				}
+
+				if(length > 0) {
+					error_t err = call AMSend.send[iface](destination, msg, length);
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
 					if(err == SUCCESS) {
 						m_busy = TRUE;
@@ -241,7 +282,7 @@ implementation {
 
 	event void Timer.fired() {
 		m_announcements++;
-		announce(DEVA_ANNOUNCEMENT_INTERFACE_ID, AM_BROADCAST_ADDR); // Currently announcements only on first interface
+		announce(DEVA_ANNOUNCEMENT_INTERFACE_ID, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR); // Currently announcements only on first interface
 		scheduleNextAnnouncement();
 	}
 
@@ -256,12 +297,43 @@ implementation {
 		if(len >= 2) {
 			switch(((uint8_t*)payload)[0]) {
 				case DEVA_ANNOUNCEMENT:
-					if(((uint8_t*)payload)[1] == DEVICE_ANNOUNCEMENT_VERSION) {
+					if(((uint8_t*)payload)[1] == DEVICE_ANNOUNCEMENT_VERSION) { // version 2
 						if(len >= sizeof(device_announcement_t)) {
 							device_announcement_t* da = (device_announcement_t*)payload;
 							infob1("anc %"PRIu32":%"PRIu32, da->guid, 8,
 								(uint32_t)(da->boot_number), (uint32_t)(da->uptime));
 							signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), da); // TODO a proper event?
+						}
+					}
+					else if(((uint8_t*)payload)[1] == 1) { // version 1 - upgrade to current version structure
+						if(len >= sizeof(device_announcement_v1_t)) {
+							device_announcement_v1_t* da1 = (device_announcement_v1_t*)payload;
+							device_announcement_t da;
+
+							da.header = da1->header;
+							da.version = DEVICE_ANNOUNCEMENT_VERSION;
+							memcpy(da.guid, da1->guid, 8);
+							da.boot_number = da1->boot_number;
+
+							da.boot_time = da1->boot_time;
+							da.uptime = da1->uptime;
+							da.lifetime = da1->lifetime;
+							da.announcement = da1->announcement;
+
+							da.uuid = da1->uuid;
+
+							da.position_type = 'U'; // position type in V1 is not specified ... could be anything
+							da.latitude = da1->latitude;
+							da.longitude = da1->longitude;
+							da.elevation = da1->elevation;
+
+							da.ident_timestamp = da1->ident_timestamp;
+
+							da.feature_list_hash = da1->feature_list_hash;
+
+							infob1("anc %"PRIu32":%"PRIu32, da.guid, 8,
+								(uint32_t)(da.boot_number), (uint32_t)(da.uptime));
+							signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), &da); // TODO a proper event?
 						}
 					}
 					else {
@@ -270,9 +342,17 @@ implementation {
 					}
 				break;
 
-				case DEVA_QUERY:
-					info1("qry[%u] %04X", iface, call AMPacket.source[iface](msg));
-					announce(iface, call AMPacket.source[iface](msg));
+				case DEVA_QUERY: {
+					uint8_t version = DEVICE_ANNOUNCEMENT_VERSION;
+					if(len >= 2) {
+						version = ((uint8_t*)payload)[1];
+						if(version > DEVICE_ANNOUNCEMENT_VERSION) {
+							version = DEVICE_ANNOUNCEMENT_VERSION;
+						}
+					}
+					info1("qry[%u] v%d %04X", iface, version, call AMPacket.source[iface](msg));
+					announce(iface, version, call AMPacket.source[iface](msg));
+				}
 				break;
 
 				case DEVA_DESCRIBE:
