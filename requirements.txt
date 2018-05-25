@@ -1,3 +1,7 @@
 prolab.tos-coordinates, git@github.com:proactivity-lab/tos-coordinates.git
 prolab.tos-rtc,         git@github.com:proactivity-lab/tos-rtc.git
 thinnect.tos-groundlib, git@github.com:thinnect/tos-groundlib.git
+
+Coordinate sync:
+tiny_haversine from thinnect.tiny-nmea, git@github.com:thinnect/tiny-nmea.git
+sec_tmilli.h, for rfr2: https://github.com/thinnect/tos-rfxsecond/blob/master/tos/sec_tmilli.h
