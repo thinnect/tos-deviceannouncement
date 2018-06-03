@@ -7,6 +7,8 @@ implementation {
 
 	components new DevACoordinateSyncP();
 
+	components TinyHaversineC;
+
 	components DeviceAnnouncementC;
 	DevACoordinateSyncP.DeviceAnnouncement -> DeviceAnnouncementC.DeviceAnnouncement;
 
