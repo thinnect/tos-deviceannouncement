@@ -45,6 +45,7 @@ implementation {
 	components UserSignatureAreaC;
 	DeviceAnnouncementP.ProductionTime -> UserSignatureAreaC.ProductionTime;
 	DeviceAnnouncementP.ManufacturerUuid128 -> UserSignatureAreaC.ManufacturerUuid128;
+	DeviceAnnouncementP.PCBVersion -> UserSignatureAreaC.PCBVersion;
 
 	components new TimerMilliC();
 	DeviceAnnouncementP.Timer -> TimerMilliC;
@@ -61,6 +62,9 @@ implementation {
 	DeviceAnnouncementP.AMSend = AMSend;
 	DeviceAnnouncementP.AMPacket = AMPacket;
 	DeviceAnnouncementP.Receive = Receive;
+
+	components ActiveMessageC;
+	DeviceAnnouncementP.RadioChannel -> ActiveMessageC.RadioChannel;
 
 	components new AMSenderC(AMID_DEVICE_ANNOUNCEMENT);
 	DeviceAnnouncementP.AMSend[DEVA_ANNOUNCEMENT_INTERFACE_ID] -> AMSenderC;

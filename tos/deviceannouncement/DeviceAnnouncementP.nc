@@ -15,6 +15,8 @@ generic module DeviceAnnouncementP(uint8_t ifaces, uint8_t total_features) {
 		interface Receive[uint8_t iface];
 		interface LocalIeeeEui64;
 
+		interface Get<semantic_version_t> as PCBVersion;
+
 		interface GetStruct<uuid_t> as PlatformUuid128;
 		interface GetStruct<uuid_t> as ApplicationUuid128;
 		interface GetStruct<uuid_t> as ManufacturerUuid128;
@@ -26,6 +28,8 @@ generic module DeviceAnnouncementP(uint8_t ifaces, uint8_t total_features) {
 		interface GetStruct<coordinates_geo_t> as GetGeo;
 
 		interface RealTimeClock;
+
+		interface RadioChannel;
 
 		interface Timer<TMilli>;
 		interface Random;
@@ -134,8 +138,8 @@ implementation {
 						length = sizeof(device_announcement_v1_t);
 					}
 				}
-				else if(version == DEVICE_ANNOUNCEMENT_VERSION) {
-					device_announcement_t* anc = (device_announcement_t*)call AMSend.getPayload[iface](msg, sizeof(device_announcement_t));
+				else {
+					device_announcement_v2_t* anc = (device_announcement_v2_t*)call AMSend.getPayload[iface](msg, sizeof(device_announcement_v2_t));
 					if(anc != NULL) {
 						ieee_eui64_t guid = call LocalIeeeEui64.getId();
 						uuid_t uuid;
@@ -160,14 +164,14 @@ implementation {
 						anc->longitude = geo.longitude;
 						anc->elevation = geo.elevation;
 
+						anc->radio_tech = 1; // Always 802.15.4 ... for now
+						anc->radio_channel = call RadioChannel.getChannel();
+
 						anc->ident_timestamp = IDENT_TIMESTAMP;
 						anc->feature_list_hash = featureListHash();
 
-						length = sizeof(device_announcement_t);
+						length = sizeof(device_announcement_v2_t);
 					}
-				}
-				else {
-					err1("v%d", version);
 				}
 
 				if(length > 0) {
@@ -185,35 +189,72 @@ implementation {
 		return FAIL;
 	}
 
-	error_t describe(uint8_t iface, am_addr_t destination) {
+	error_t describe(uint8_t iface, uint8_t version, am_addr_t destination) {
 		if(!m_busy) {
 			message_t* msg = call MessagePool.get();
 			if(msg != NULL) {
-				device_description_t* anc = (device_description_t*)call AMSend.getPayload[iface](msg, sizeof(device_description_t));
-				if(anc != NULL) {
-					error_t err;
-					ieee_eui64_t guid = call LocalIeeeEui64.getId();
-					uuid_t uuid;
+				uint8_t length = 0;
+				ieee_eui64_t guid = call LocalIeeeEui64.getId();
+				if(version == 1) {
+					device_description_v1_t* anc = (device_description_v1_t*)call AMSend.getPayload[iface](msg, sizeof(device_description_v1_t));
+					if(anc != NULL) {
+						uuid_t uuid;
 
-					anc->header = DEVA_DESCRIPTION;
-					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
-					memcpy(anc->guid, guid.data, sizeof(anc->guid));
-					anc->boot_number = call BootNumber.get();
+						anc->header = DEVA_DESCRIPTION;
+						anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+						memcpy(anc->guid, guid.data, sizeof(anc->guid));
+						anc->boot_number = call BootNumber.get();
 
-					call PlatformUuid128.get(&uuid);
-					hton_uuid(&(anc->platform), &uuid);
+						call PlatformUuid128.get(&uuid);
+						hton_uuid(&(anc->platform), &uuid);
 
-					call ManufacturerUuid128.get(&uuid);
-					hton_uuid(&(anc->manufacturer), &uuid);
+						call ManufacturerUuid128.get(&uuid);
+						hton_uuid(&(anc->manufacturer), &uuid);
 
-					anc->production = call ProductionTime.get();
+						anc->production = call ProductionTime.get();
 
-					anc->ident_timestamp = IDENT_TIMESTAMP;
-					anc->sw_major_version = SW_MAJOR_VERSION;
-					anc->sw_minor_version = SW_MINOR_VERSION;
-					anc->sw_patch_version = SW_PATCH_VERSION;
+						anc->ident_timestamp = IDENT_TIMESTAMP;
+						anc->sw_major_version = SW_MAJOR_VERSION;
+						anc->sw_minor_version = SW_MINOR_VERSION;
+						anc->sw_patch_version = SW_PATCH_VERSION;
 
-					err = call AMSend.send[iface](destination, msg, sizeof(device_description_t));
+						length = sizeof(device_description_v1_t);
+					}
+				}
+				else {
+					device_description_v2_t* anc = (device_description_v2_t*)call AMSend.getPayload[iface](msg, sizeof(device_description_v2_t));
+					if(anc != NULL) {
+						uuid_t uuid;
+						semantic_version_t hwv = call PCBVersion.get();
+
+						anc->header = DEVA_DESCRIPTION;
+						anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+						memcpy(anc->guid, guid.data, sizeof(anc->guid));
+						anc->boot_number = call BootNumber.get();
+
+						call PlatformUuid128.get(&uuid);
+						hton_uuid(&(anc->platform), &uuid);
+
+						anc->hw_major_version = hwv.major;
+						anc->hw_minor_version = hwv.minor;
+						anc->hw_assem_version = hwv.patch;
+
+						call ManufacturerUuid128.get(&uuid);
+						hton_uuid(&(anc->manufacturer), &uuid);
+
+						anc->production = call ProductionTime.get();
+
+						anc->ident_timestamp = IDENT_TIMESTAMP;
+						anc->sw_major_version = SW_MAJOR_VERSION;
+						anc->sw_minor_version = SW_MINOR_VERSION;
+						anc->sw_patch_version = SW_PATCH_VERSION;
+
+						length = sizeof(device_description_v2_t);
+					}
+				}
+
+				if(length > 0) {
+					error_t err = call AMSend.send[iface](destination, msg, sizeof(device_description_v2_t));
 					logger(err == SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
 					if(err == SUCCESS) {
 						m_busy = TRUE;
@@ -295,20 +336,24 @@ implementation {
 	event message_t* Receive.receive[uint8_t iface](message_t* msg, void* payload, uint8_t len) {
 		debugb1("rcv[%u]", payload, len, iface);
 		if(len >= 2) {
+			uint8_t version = ((uint8_t*)payload)[1];
+			if(version > DEVICE_ANNOUNCEMENT_VERSION) {
+				version = DEVICE_ANNOUNCEMENT_VERSION;
+			}
 			switch(((uint8_t*)payload)[0]) {
 				case DEVA_ANNOUNCEMENT:
-					if(((uint8_t*)payload)[1] == DEVICE_ANNOUNCEMENT_VERSION) { // version 2
-						if(len >= sizeof(device_announcement_t)) {
-							device_announcement_t* da = (device_announcement_t*)payload;
+					if(version == DEVICE_ANNOUNCEMENT_VERSION) { // version 2
+						if(len >= sizeof(device_announcement_v2_t)) {
+							device_announcement_v2_t* da = (device_announcement_v2_t*)payload;
 							infob1("anc %"PRIu32":%"PRIu32, da->guid, 8,
 								(uint32_t)(da->boot_number), (uint32_t)(da->uptime));
 							signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), da); // TODO a proper event?
 						}
 					}
-					else if(((uint8_t*)payload)[1] == 1) { // version 1 - upgrade to current version structure
+					else if(version == 1) { // version 1 - upgrade to current version structure
 						if(len >= sizeof(device_announcement_v1_t)) {
 							device_announcement_v1_t* da1 = (device_announcement_v1_t*)payload;
-							device_announcement_t da;
+							device_announcement_v2_t da;
 
 							da.header = da1->header;
 							da.version = DEVICE_ANNOUNCEMENT_VERSION;
@@ -327,6 +372,9 @@ implementation {
 							da.longitude = da1->longitude;
 							da.elevation = da1->elevation;
 
+							da.radio_tech = 0; // 0:unknown(channel info invalid)
+							da.radio_channel = 0;
+
 							da.ident_timestamp = da1->ident_timestamp;
 
 							da.feature_list_hash = da1->feature_list_hash;
@@ -343,13 +391,6 @@ implementation {
 				break;
 
 				case DEVA_QUERY: {
-					uint8_t version = DEVICE_ANNOUNCEMENT_VERSION;
-					if(len >= 2) {
-						version = ((uint8_t*)payload)[1];
-						if(version > DEVICE_ANNOUNCEMENT_VERSION) {
-							version = DEVICE_ANNOUNCEMENT_VERSION;
-						}
-					}
 					info1("qry[%u] v%d %04X", iface, version, call AMPacket.source[iface](msg));
 					announce(iface, version, call AMPacket.source[iface](msg));
 				}
@@ -357,7 +398,7 @@ implementation {
 
 				case DEVA_DESCRIBE:
 					info1("dsc[%u] %04X", iface, call AMPacket.source[iface](msg));
-					describe(iface, call AMPacket.source[iface](msg));
+					describe(iface, version, call AMPacket.source[iface](msg));
 				break;
 
 				case DEVA_LIST_FEATURES:
@@ -378,6 +419,8 @@ implementation {
 	async event void RealTimeClock.changed(time64_t old, time64_t current) {
 		post bootTimeTask();
 	}
+
+	event void RadioChannel.setChannelDone() { }
 
 	default command error_t DeviceFeatureUuid128.get[uint8_t fidx](uuid_t* uuid) { return ELAST; }
 

@@ -53,7 +53,7 @@ typedef nx_struct device_announcement_v1 {
 } device_announcement_v1_t;
 // 2+8+4+20+16+12+8+4=74
 
-typedef nx_struct device_announcement {
+typedef nx_struct device_announcement_v2 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // 02 Protocol version
 	nx_uint8_t guid[8];            // Device EUI64
@@ -71,11 +71,14 @@ typedef nx_struct device_announcement {
 	nx_int32_t longitude;          // 1E6
 	nx_int32_t elevation;          // centimeters
 
+	nx_uint8_t radio_tech;         // 0:unknown(channel info invalid), 1:802.15.4, 2:BLE, 3:BLE+802.15.4(15.4 channel info), 4:802.11
+	nx_uint8_t radio_channel;      // Current primary radio channel of the device - 0 unknown / 255 hopping
+
 	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
 
 	nx_uint32_t feature_list_hash; // hash of feature UUIDs
-} device_announcement_t;
-// 2+8+4+20+16+13+8+4=75
+} device_announcement_v2_t;
+// 2+8+4+20+16+RDO+13+8+4=75
 
 typedef nx_struct device_request {
 	nx_uint8_t header;             // 0x10 or 0x11
@@ -88,7 +91,7 @@ typedef nx_struct device_feature_request {
 	nx_uint8_t offset;             // What feature to start from
 } device_description_request_t;
 
-typedef nx_struct device_description {
+typedef nx_struct device_description_v1 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // Protocol version
 	nx_uint8_t guid[8];            // Device EUI64
@@ -99,11 +102,34 @@ typedef nx_struct device_description {
 	nx_time64_t production;        // When the device was produced, unix timestamp, seconds
 
 	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
-	nx_uint8_t  sw_major_version;
-	nx_uint8_t  sw_minor_version;
-	nx_uint8_t  sw_patch_version;
-} device_description_t;
-// 2+8+16+16+4+4+8+3=61
+	nx_uint8_t  sw_major_version;  // Firmware version, major.
+	nx_uint8_t  sw_minor_version;  // Firmware version, minor.
+	nx_uint8_t  sw_patch_version;  // Firmware version, patch.
+} device_description_v1_t;
+// 2+8+4+16+16+8+8+3=65
+
+typedef nx_struct device_description_v2 {
+	nx_uint8_t header;             // 00
+	nx_uint8_t version;            // Protocol version
+	nx_uint8_t guid[8];            // Device EUI64
+	nx_uint32_t boot_number;       // Current boot number
+
+	nx_uuid_t  platform;           // Platform UUID - platform is a combination of a BOARD and peripherals
+	nx_uint8_t hw_major_version;   // Platform HW version, major.
+	nx_uint8_t hw_minor_version;   // Platform HW version, minor.
+	nx_uint8_t hw_assem_version;   // Platform HW version, assembly.
+
+	nx_uuid_t manufacturer;        // Manufacturer UUID
+	nx_time64_t production;        // When the device was produced, unix timestamp, seconds
+
+	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
+	nx_uint8_t  sw_major_version;  // Firmware version, major.
+	nx_uint8_t  sw_minor_version;  // Firmware version, minor.
+	nx_uint8_t  sw_patch_version;  // Firmware version, patch.
+} device_description_v2_t;
+// 2+8+4+16+3+16+8+8+3=68
+
+typedef device_announcement_v2_t device_announcement_t;
 
 typedef nx_struct device_features {
 	nx_uint8_t header;             // 00
