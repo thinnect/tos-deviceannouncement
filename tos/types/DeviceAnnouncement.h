@@ -66,7 +66,7 @@ typedef nx_struct device_announcement_v2 {
 
 	nx_uuid_t uuid;                // Application UUID (general feature set)
 
-	nx_uint8_t position_type;      // F - fix, G - gps, L - local, A - area. U - unknown.
+	nx_uint8_t position_type;      // F:fix, C:central(special F), G:gps, L:local, A:area, U:unknown.
 	nx_int32_t latitude;           // 1E6
 	nx_int32_t longitude;          // 1E6
 	nx_int32_t elevation;          // centimeters
