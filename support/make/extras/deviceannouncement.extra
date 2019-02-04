@@ -1,0 +1,17 @@
+#
+# TinyOS extra to include all the stuff in this repository.
+# @author Raido Pahtma
+# @license MIT
+#
+
+# --------------------------------------------------------------------
+#            deviceannouncement
+# --------------------------------------------------------------------
+# DeviceAnnouncement
+PFLAGS += -I%T/deviceannouncement
+PFLAGS += -I%T/deviceannouncement/sync
+# Code in tos/interfaces gets included automatically
+# Code in tos/types gets included automatically
+# --------------------------------------------------------------------
+#            ...
+# --------------------------------------------------------------------
