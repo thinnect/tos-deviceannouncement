@@ -12,6 +12,14 @@
 #define DEVICE_ANNOUNCEMENT_VERSION_V1 0x01
 #define DEVICE_ANNOUNCEMENT_VERSION 0x02
 
+#ifndef NESC
+// This is a nesC header. If you wish to include it in a plain C project, it's
+// your responsibility to provide the compatibility header below which provides
+// the nx_* types (and other nesC specific stuff) so C will recognize them.
+// NB! All nx_* types use big endian. You need to manually convert those in C.
+# include "nesc_to_c_compat.h"
+#endif
+
 enum DeviceAnnouncementHeaderEnum {
 	DEVA_ANNOUNCEMENT    = 0x00,
 	DEVA_DESCRIPTION     = 0x01,
@@ -30,6 +38,7 @@ enum DeviceAnnouncementHeaderEnum {
 	DEVA_ACKNOWLEDGEMENT = 0xAA, // Ack an announcement (when appropriate)
 };
 
+#pragma pack(push, 1)
 typedef nx_struct device_announcement_v1 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // Protocol version
@@ -52,7 +61,9 @@ typedef nx_struct device_announcement_v1 {
 	nx_uint32_t feature_list_hash; // hash of feature UUIDs
 } device_announcement_v1_t;
 // 2+8+4+20+16+12+8+4=74
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef nx_struct device_announcement_v2 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // 02 Protocol version
@@ -79,18 +90,24 @@ typedef nx_struct device_announcement_v2 {
 	nx_uint32_t feature_list_hash; // hash of feature UUIDs
 } device_announcement_v2_t;
 // 2+8+4+20+16+RDO+13+8+4=75
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef nx_struct device_request {
 	nx_uint8_t header;             // 0x10 or 0x11
 	nx_uint8_t version;            // Protocol version
 } device_request_t;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef nx_struct device_feature_request {
 	nx_uint8_t header;             // 0x12
 	nx_uint8_t version;            // Protocol version
 	nx_uint8_t offset;             // What feature to start from
 } device_description_request_t;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef nx_struct device_description_v1 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // Protocol version
@@ -107,7 +124,9 @@ typedef nx_struct device_description_v1 {
 	nx_uint8_t  sw_patch_version;  // Firmware version, patch.
 } device_description_v1_t;
 // 2+8+4+16+16+8+8+3=65
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef nx_struct device_description_v2 {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // Protocol version
@@ -128,9 +147,11 @@ typedef nx_struct device_description_v2 {
 	nx_uint8_t  sw_patch_version;  // Firmware version, patch.
 } device_description_v2_t;
 // 2+8+4+16+3+16+8+8+3=68
+#pragma pack(pop)
 
 typedef device_announcement_v2_t device_announcement_t;
 
+#pragma pack(push, 1)
 typedef nx_struct device_features {
 	nx_uint8_t header;             // 00
 	nx_uint8_t version;            // Protocol version
@@ -142,6 +163,7 @@ typedef nx_struct device_features {
 	nx_uuid_t features[];
 } device_features_t;
 // 2+8+4+2+0*16=12 -> 2+8+4+2+1*16=28 -> 2+8+4+2+6*16=108
+#pragma pack(pop)
 
 #define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID unique("DeviceAnnouncementCommunicationsInterface")
 #define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_COUNT uniqueCount("DeviceAnnouncementCommunicationsInterface")
