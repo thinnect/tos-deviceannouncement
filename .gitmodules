@@ -1,0 +1,9 @@
+[submodule "test/zoo/thinnect.mist-comm"]
+	path = test/zoo/thinnect.mist-comm
+	url = git@github.com:thinnect/mist-comm.git
+[submodule "test/zoo/thinnect.device-signature"]
+	path = test/zoo/thinnect.device-signature
+	url = git@github.com:thinnect/device-signature.git
+[submodule "test/zoo/thinnect.lll"]
+	path = test/zoo/thinnect.lll
+	url = git@github.com:thinnect/lll.git

@@ -20,6 +20,8 @@
 # include "nesc_to_c_compat.h"
 #endif
 
+#include <UniversallyUniqueIdentifier.h>
+
 enum DeviceAnnouncementHeaderEnum {
 	DEVA_ANNOUNCEMENT    = 0x00,
 	DEVA_DESCRIPTION     = 0x01,
@@ -165,14 +167,16 @@ typedef nx_struct device_features {
 // 2+8+4+2+0*16=12 -> 2+8+4+2+1*16=28 -> 2+8+4+2+6*16=108
 #pragma pack(pop)
 
-#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID unique("DeviceAnnouncementCommunicationsInterface")
-#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_COUNT uniqueCount("DeviceAnnouncementCommunicationsInterface")
+#ifdef NESC // TinyOS specific announcement module handling
+	#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID unique("DeviceAnnouncementCommunicationsInterface")
+	#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_COUNT uniqueCount("DeviceAnnouncementCommunicationsInterface")
 
-#define UQ_DEVICE_FEATURE_INDEX unique("DeviceFeatureUuidIndex")
-#define UQ_DEVICE_FEATURE_COUNT uniqueCount("DeviceFeatureUuidIndex")
+	#define UQ_DEVICE_FEATURE_INDEX unique("DeviceFeatureUuidIndex")
+	#define UQ_DEVICE_FEATURE_COUNT uniqueCount("DeviceFeatureUuidIndex")
 
-enum DeviceAnnouncementInterfaceEnum {
-	DEVA_ANNOUNCEMENT_INTERFACE_ID = UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID
-};
+	enum DeviceAnnouncementInterfaceEnum {
+		DEVA_ANNOUNCEMENT_INTERFACE_ID = UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID
+	};
+#endif//NESC
 
 #endif // DEVICEANNOUNCEMENT_H_
