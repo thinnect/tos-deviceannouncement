@@ -2,4 +2,5 @@ language: c
 sudo: false
 script:
   - make -C test
-  - ./test/test-app
+  - cd test
+  - ./test-app
