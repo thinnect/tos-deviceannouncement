@@ -7,3 +7,6 @@
 [submodule "test/zoo/thinnect.lll"]
 	path = test/zoo/thinnect.lll
 	url = https://github.com/thinnect/lll.git
+[submodule "test/zoo/jtbr.endianness"]
+	path = test/zoo/jtbr.endianness
+	url = https://gist.github.com/4163b8ec6672aabb0656b96692af5e33.git

@@ -9,8 +9,11 @@ CFLAGS += -Izoo/thinnect.mist-comm/include
 CFLAGS += -Izoo/thinnect.mist-comm/include/compat
 CFLAGS += -Izoo/thinnect.mist-comm/test
 
+CFLAGS += -Izoo/jtbr.endianness
+
 CFLAGS += -Izoo/thinnect.device-signature/signature
 CFLAGS += -Izoo/thinnect.device-signature/area
+CFLAGS += -Izoo/thinnect.device-signature/area/file
 CFLAGS += -Izoo/thinnect.device-signature/test
 
 CFLAGS += -Izoo/thinnect.lll/logging
@@ -19,7 +22,7 @@ CFLAGS += -DBASE_LOG_LEVEL=0xFFFF
 CFLAGS += -DSW_MAJOR_VERSION=1
 CFLAGS += -DSW_MINOR_VERSION=2
 CFLAGS += -DSW_PATCH_VERSION=3
-CFLAGS += -DIDENT_TIMESTAMP=12345678
+CFLAGS += -DIDENT_TIMESTAMP=0x0102030405060708
 
 SRCS = test.c device_announcement.c device_features.c UniversallyUniqueIdentifier.c
 SRCS += mist_comm_am.c mist_comm_api.c mist_comm_rcv.c
@@ -41,7 +44,7 @@ test-app: $(OBJS)
 	gcc $^ -o $@
 
 %.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS)
+	gcc -c -o $@ $< $(CFLAGS)
 
 clean:
 	rm *.o

@@ -1,5 +1,5 @@
 language: c
-sudo: false # only for faster builds
+sudo: false
 script:
   - make -C test
   - ./test/test-app

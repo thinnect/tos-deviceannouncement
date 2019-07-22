@@ -12,6 +12,9 @@
 
 #include <string.h>
 #include <inttypes.h>
+
+#include "endianness.h"
+
 #include "mist_comm.h"
 #include "mist_comm_am.h"
 
@@ -32,7 +35,7 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 device_announcer_t* m_announcers;
 time64_t m_boot_time;
 bool m_busy;
-bool m_announcements; // TODO should be announcer specific
+uint8_t m_announcements; // TODO should be announcer specific
 
 comms_msg_t m_msg_pool;
 comms_msg_t* m_msg_pool_msg = &m_msg_pool;
@@ -119,12 +122,12 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->header = DEVA_ANNOUNCEMENT;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = lifetime_boots();
+					anc->boot_number = hton32(lifetime_boots());
 
-					anc->boot_time = m_boot_time;
-					anc->uptime = localtime_sec();
-					anc->lifetime = lifetime_sec();
-					anc->announcement = m_announcements;
+					anc->boot_time = hton64(m_boot_time);
+					anc->uptime = hton32(localtime_sec());
+					anc->lifetime = hton32(lifetime_sec());
+					anc->announcement = hton32(m_announcements);
 
 					// TODO application UUID
 					memset(&(anc->uuid), 0, 16);
@@ -133,12 +136,12 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					//anc->latitude = geo.latitude;
 					//anc->longitude = geo.longitude;
 					//anc->elevation = geo.elevation;
-					anc->latitude = 0;
-					anc->longitude = 0;
-					anc->elevation = 0;
+					anc->latitude = hton32(0);
+					anc->longitude = hton32(0);
+					anc->elevation = hton32(0);
 
-					anc->ident_timestamp = IDENT_TIMESTAMP;
-					anc->feature_list_hash = devf_hash();
+					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+					anc->feature_list_hash = hton32(devf_hash());
 
 					length = sizeof(device_announcement_v1_t);
 				}
@@ -151,12 +154,12 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->header = DEVA_ANNOUNCEMENT;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = lifetime_boots();
+					anc->boot_number = hton32(lifetime_boots());
 
-					anc->boot_time = m_boot_time;
-					anc->uptime = localtime_sec();
-					anc->lifetime = lifetime_sec();
-					anc->announcement = m_announcements;
+					anc->boot_time = hton64(m_boot_time);
+					anc->uptime = hton32(localtime_sec());
+					anc->lifetime = hton32(lifetime_sec());
+					anc->announcement = hton32(m_announcements);
 
 					// TODO application UUID
 					memset(&(anc->uuid), 0, 16);
@@ -167,15 +170,15 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					//anc->longitude = geo.longitude;
 					//anc->elevation = geo.elevation;
 					anc->position_type = 'U';
-					anc->latitude = 0;
-					anc->longitude = 0;
-					anc->elevation = 0;
+					anc->latitude = hton32(0);
+					anc->longitude = hton32(0);
+					anc->elevation = hton32(0);
 
 					anc->radio_tech = 1; // Always 802.15.4 ... for now
 					anc->radio_channel = 0; // call RadioChannel.getChannel();
 
-					anc->ident_timestamp = IDENT_TIMESTAMP;
-					anc->feature_list_hash = devf_hash();
+					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+					anc->feature_list_hash = hton32(devf_hash());
 
 					length = sizeof(device_announcement_v2_t);
 				}
@@ -215,14 +218,14 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->header = DEVA_DESCRIPTION;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = lifetime_boots();
+					anc->boot_number = hton32(lifetime_boots());
 
 					sigGetPlatformUUID((uint8_t*)&(anc->platform));
 
 					sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
-					anc->production = sigGetPlatformProductionTime();
+					anc->production = hton64(sigGetPlatformProductionTime());
 
-					anc->ident_timestamp = IDENT_TIMESTAMP;
+					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
 					anc->sw_major_version = SW_MAJOR_VERSION;
 					anc->sw_minor_version = SW_MINOR_VERSION;
 					anc->sw_patch_version = SW_PATCH_VERSION;
@@ -239,7 +242,7 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->header = DEVA_DESCRIPTION;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = lifetime_boots();
+					anc->boot_number = hton32(lifetime_boots());
 
 					sigGetPlatformUUID((uint8_t*)&(anc->platform));
 
@@ -248,9 +251,9 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->hw_assem_version = hwv.patch;
 
 					sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
-					anc->production = sigGetPlatformProductionTime();
+					anc->production = hton64(sigGetPlatformProductionTime());
 
-					anc->ident_timestamp = IDENT_TIMESTAMP;
+					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
 					anc->sw_major_version = SW_MAJOR_VERSION;
 					anc->sw_minor_version = SW_MINOR_VERSION;
 					anc->sw_patch_version = SW_PATCH_VERSION;
@@ -295,7 +298,7 @@ static bool list_features(comms_layer_t* comms, am_addr_t destination, uint8_t o
 				anc->header = DEVA_FEATURES;
 				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 				sigGetEui64((uint8_t*)anc->guid);
-				anc->boot_number = lifetime_boots();
+				anc->boot_number = hton32(lifetime_boots());
 
 				anc->total = total_features;
 				anc->offset = offset;
@@ -441,10 +444,11 @@ bool deva_poll() {
 	}
 	while(an != NULL) {
 		if((an->period > 0)
-		 &&(an->last + an->period > now)) {
+		 &&(an->last + next_announcement(an->announcements, an->period) <= now)) {
 			if(announce(an->comms, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR)) {
 				an->last = now;
 				an->announcements++;
+				m_announcements++;
 			}
 			return true;
 		}
