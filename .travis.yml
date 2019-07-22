@@ -2,4 +2,4 @@ language: c
 sudo: false # only for faster builds
 script:
   - make -C test
-  - ./test-app
+  - ./test/test-app
