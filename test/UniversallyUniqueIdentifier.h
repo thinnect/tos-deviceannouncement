@@ -8,7 +8,9 @@
 
 #include <string.h>
 
+#ifndef NESC
 #include "nesc_to_c_compat.h"
+#endif
 
 typedef struct uuid {
 	uint32_t time_low;
@@ -19,6 +21,7 @@ typedef struct uuid {
 	uint8_t  node[6];
 } uuid_t;
 
+#pragma pack(push, 1)
 typedef nx_struct nx_uuid {
 	nx_uint32_t time_low;
 	nx_uint16_t time_mid;
@@ -27,6 +30,7 @@ typedef nx_struct nx_uuid {
 	nx_uint8_t  clock_seq_low;
 	nx_uint8_t  node[6];
 } nx_uuid_t;
+#pragma pack(pop)
 
 nx_uuid_t* hton_uuid(nx_uuid_t* net_uuid, uuid_t* host_uuid);
 uuid_t* ntoh_uuid(uuid_t* host_uuid, nx_uuid_t* net_uuid);

@@ -325,8 +325,10 @@ static bool list_features(comms_layer_t* comms, am_addr_t destination, uint8_t o
 					return true;
 				}
 			}
+			else warn1("pl");
 			messagepool_put(msg);
 		}
+		else warn1("pool");
 	}
 	else warn1("bsy");
 	return false;
@@ -422,7 +424,7 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 
 			case DEVA_LIST_FEATURES:
 				if(len >= 3) {
-					info1("lst[%u] %04X", comms, comms_am_get_source(comms, msg));
+					info1("lst[%p] %04X", comms, comms_am_get_source(comms, msg));
 					list_features(comms, comms_am_get_source(comms, msg), ((uint8_t*)payload)[2]);
 				}
 			break;

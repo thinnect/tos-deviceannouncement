@@ -53,20 +53,26 @@ bool devf_get_feature(uint8_t fnum, nx_uuid_t* ftr) {
 }
 
 bool devf_add_feature(device_feature_t* ftr, nx_uuid_t* feature) {
-	if(m_features == NULL) {
+	device_feature_t* f = m_features;
+	while(f != NULL) {
+		// Features must not be added multiple times
+		debug1("%d %p %p %p %p %d", (int)m_count, ftr, feature, f, &(f->uuid), sizeof(nx_uuid_t));
+		if((f == ftr)||(memcmp(&(f->uuid), feature, sizeof(nx_uuid_t)) == 0)) {
+			warnb1("dup %p %p", feature, sizeof(nx_uuid_t), ftr, f);
+			return false;
+		}
+		if(f->next == NULL) {
+			break;
+		}
+		else {
+			f = ftr->next;
+		}
+	}
+
+	if(f == NULL) {
 		m_features = ftr;
 	}
 	else {
-		device_feature_t* f = m_features;
-		while(f->next != NULL) {
-			// Features must not be added multiple times
-			if((f == ftr)||(memcmp(&(f->uuid), feature, sizeof(nx_uuid_t)) == 0)) {
-				warnb1("dup %p %p", feature, sizeof(nx_uuid_t), ftr, f);
-				return false;
-			}
-			f = ftr->next;
-		}
-
 		f->next = ftr; // Append to the end
 	}
 
