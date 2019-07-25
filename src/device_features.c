@@ -65,7 +65,7 @@ bool devf_add_feature(device_feature_t* ftr, nx_uuid_t* feature) {
 			break;
 		}
 		else {
-			f = ftr->next;
+			f = f->next;
 		}
 	}
 
