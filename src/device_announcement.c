@@ -28,6 +28,8 @@ extern uint32_t localtime_sec(); // TODO header
 extern uint32_t lifetime_sec(); // TODO header
 extern uint32_t lifetime_boots(); // TODO header
 extern time64_t realtimeclock(); // TODO header
+extern uint8_t radio_channel(); // TODO header
+extern void nx_uuid_application(nx_uuid_t* uuid);
 
 static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_t result, void *user);
 static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user);
@@ -129,8 +131,7 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->lifetime = hton32(lifetime_sec());
 					anc->announcement = hton32(m_announcements);
 
-					// TODO application UUID
-					memset(&(anc->uuid), 0, 16);
+					nx_uuid_application(&(anc->uuid));
 
 					//call GetGeo.get(&geo);
 					//anc->latitude = geo.latitude;
@@ -161,8 +162,7 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->lifetime = hton32(lifetime_sec());
 					anc->announcement = hton32(m_announcements);
 
-					// TODO application UUID
-					memset(&(anc->uuid), 0, 16);
+					nx_uuid_application(&(anc->uuid));
 
 					//call GetGeo.get(&geo);
 					//anc->position_type = geo.type;
@@ -175,7 +175,7 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 					anc->elevation = hton32(0);
 
 					anc->radio_tech = 1; // Always 802.15.4 ... for now
-					anc->radio_channel = 0; // call RadioChannel.getChannel();
+					anc->radio_channel = radio_channel(); // call RadioChannel.getChannel();
 
 					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
 					anc->feature_list_hash = hton32(devf_hash());
@@ -213,8 +213,6 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 			if(version == 1) {
 				device_description_v1_t* anc = (device_description_v1_t*)comms_get_payload(comms, msg, sizeof(device_description_v1_t));
 				if(anc != NULL) {
-					uuid_t uuid;
-
 					anc->header = DEVA_DESCRIPTION;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
@@ -236,7 +234,6 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 			else {
 				device_description_v2_t* anc = (device_description_v2_t*)comms_get_payload(comms, msg, sizeof(device_description_v2_t));
 				if(anc != NULL) {
-					uuid_t uuid;
 					semver_t hwv = sigGetPlatformVersion();
 
 					anc->header = DEVA_DESCRIPTION;

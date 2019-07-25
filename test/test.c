@@ -39,6 +39,12 @@ uint32_t lifetime_boots() {
 time64_t realtimeclock() {
 	return localtime_sec() + 1000000;
 }
+uint8_t radio_channel() {
+	return 0;
+}
+void nx_uuid_application(nx_uuid_t* uuid) {
+	memset(uuid, 0, 16);
+}
 
 // Mocking radio
 comms_msg_t mmsg1;
