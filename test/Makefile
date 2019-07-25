@@ -23,7 +23,7 @@ CFLAGS += -DSW_MINOR_VERSION=2
 CFLAGS += -DSW_PATCH_VERSION=3
 CFLAGS += -DIDENT_TIMESTAMP=0x0102030405060708
 
-SRCS = test.c device_announcement.c device_features.c UniversallyUniqueIdentifier.c
+SRCS = test.c device_announcement.c device_features.c
 SRCS += mist_comm_am.c mist_comm_api.c mist_comm_rcv.c
 SRCS += DeviceSignature.c SignatureArea.c
 SRCS += loggers_std.c

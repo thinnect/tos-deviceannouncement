@@ -32,7 +32,4 @@ typedef nx_struct nx_uuid {
 } nx_uuid_t;
 #pragma pack(pop)
 
-nx_uuid_t* hton_uuid(nx_uuid_t* net_uuid, uuid_t* host_uuid);
-uuid_t* ntoh_uuid(uuid_t* host_uuid, nx_uuid_t* net_uuid);
-
 #endif // UNIVERSALLYUNIQUEIDENTIFIER_H_
