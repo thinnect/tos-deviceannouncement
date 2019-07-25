@@ -4,8 +4,8 @@
  * @author Raido Pahtma
  * @license MIT
  **/
-#ifndef DEVICEANNOUNCEMENT_H_
-#define DEVICEANNOUNCEMENT_H_
+#ifndef DEVICEANNOUNCEMENTPROTOCOL_H_
+#define DEVICEANNOUNCEMENTPROTOCOL_H_
 
 #define AMID_DEVICE_ANNOUNCEMENT 0xDA
 
@@ -167,7 +167,7 @@ typedef nx_struct device_features {
 // 2+8+4+2+0*16=12 -> 2+8+4+2+1*16=28 -> 2+8+4+2+6*16=108
 #pragma pack(pop)
 
-#ifdef NESC // TinyOS specific announcement module handling
+#ifdef NESC // TinyOS specific announcement module handling - TODO should not be here
 	#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID unique("DeviceAnnouncementCommunicationsInterface")
 	#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_COUNT uniqueCount("DeviceAnnouncementCommunicationsInterface")
 
@@ -179,4 +179,4 @@ typedef nx_struct device_features {
 	};
 #endif//NESC
 
-#endif // DEVICEANNOUNCEMENT_H_
+#endif // DEVICEANNOUNCEMENTPROTOCOL_H_

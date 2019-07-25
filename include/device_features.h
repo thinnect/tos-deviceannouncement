@@ -1,7 +1,7 @@
 /**
  * Device feature storage in a linked-list with user-provided list elements.
  *
- * Copyright Thinnect.
+ * Copyright Thinnect Inc. 2019
  * @author Raido Pahtma
  * @license MIT
  */

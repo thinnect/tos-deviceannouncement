@@ -1,3 +1,10 @@
+/**
+ * Device announcement module API.
+ *
+ * Copyright Thinnect Inc. 2019
+ * @author Raido Pahtma
+ * @license MIT
+ */
 #ifndef DEVICE_ANNOUNCEMENT_H_
 #define DEVICE_ANNOUNCEMENT_H_
 

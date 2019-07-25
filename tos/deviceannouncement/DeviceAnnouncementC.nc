@@ -4,7 +4,7 @@
  * @author Raido Pahtma
  * @license MIT
  **/
-#include "DeviceAnnouncement.h"
+#include "DeviceAnnouncementProtocol.h"
 configuration DeviceAnnouncementC {
 	provides interface DeviceAnnouncement;
 	uses {

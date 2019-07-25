@@ -2,7 +2,6 @@
 CFLAGS += -std=c99
 CFLAGS += -I.
 CFLAGS += -I../include
-CFLAGS += -I../tos/types
 CFLAGS += -I../tos/deviceannouncement
 
 CFLAGS += -Izoo/thinnect.mist-comm/include

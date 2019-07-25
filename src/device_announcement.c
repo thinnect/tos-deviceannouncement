@@ -1,11 +1,11 @@
 /**
  * Device announcement protocol implementation.
  *
- * Copyright Thinnect 2019.
+ * Copyright Thinnect Inc. 2019
  * @author Raido Pahtma
  * @license MIT
  **/
-#include "DeviceAnnouncement.h"
+#include "DeviceAnnouncementProtocol.h"
 #include "device_announcement.h"
 #include "device_features.h"
 #include "DeviceSignature.h"
