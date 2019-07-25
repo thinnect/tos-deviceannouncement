@@ -390,6 +390,67 @@ int testListFeaturesResponse() {
 }
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
+int testFeatureManagement() {
+	devf_init();
+	device_feature_t dftrs[4];
+
+	devf_add_feature(&dftrs[0], (nx_uuid_t*)"\x01\x02\x03\x04\x05\x06\x07\x08\x09\x10\x11\x12\x13\x14\x15\x16");
+	if(devf_count() != 1) {
+		return 1;
+	}
+	if(devf_hash() != 0xb2) {
+		return 2;
+	}
+
+	devf_add_feature(&dftrs[1], (nx_uuid_t*)"\x17\x18\x19\x20\x21\x22\x23\x24\x25\x26\x27\x28\x29\x30\x31\x32");
+	if(devf_count() != 2) {
+		return 1;
+	}
+	if(devf_hash() != 0x2fa) {
+		return 2;
+	}
+
+	devf_add_feature(&dftrs[2], (nx_uuid_t*)"\x33\x34\x35\x36\x37\x38\x39\x40\x41\x42\x43\x44\x45\x46\x47\x48");
+	if(devf_count() != 3) {
+		return 1;
+	}
+	if(devf_hash() != 0x6d8) {
+		return 2;
+	}
+
+	devf_add_feature(&dftrs[3], (nx_uuid_t*)"\x49\x50\x51\x52\x53\x54\x55\x56\x57\x58\x59\x60\x61\x62\x63\x64");
+	if(devf_count() != 4) {
+		return 1;
+	}
+	if(devf_hash() != 0xc58) {
+		return 2;
+	}
+
+	devf_remove_feature(&dftrs[1]); // Remove second element
+	if(devf_count() != 3) {
+		return 1;
+	}
+
+	devf_remove_feature(&dftrs[0]); // Remove first element
+	if(devf_count() != 2) {
+		return 1;
+	}
+
+	devf_remove_feature(&dftrs[3]); // Remove last element
+	if(devf_count() != 1) {
+		return 1;
+	}
+
+	devf_remove_feature(&dftrs[2]); // Remove the only remaining element
+	if(devf_count() != 0) {
+		return 1;
+	}
+
+	return 0;
+}
+//------------------------------------------------------------------------------
+
 int main() {
 	int results = 0;
 	debug1("tests start");
@@ -397,6 +458,7 @@ int main() {
 	results += testPeriodicAnnouncements();
 	results += testDescriptionResponse();
 	results += testListFeaturesResponse();
+	results += testFeatureManagement();
 
 	if(results != 0) {
 		err1("%d failures", results);
