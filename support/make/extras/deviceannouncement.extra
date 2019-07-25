@@ -1,3 +1,4 @@
+DEVICEANNOUNCEMENT_EXTRA_LOCATION := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 #
 # TinyOS extra to include all the stuff in this repository.
 # @author Raido Pahtma
@@ -11,7 +12,9 @@
 PFLAGS += -I%T/deviceannouncement
 PFLAGS += -I%T/deviceannouncement/sync
 # Code in tos/interfaces gets included automatically
-# Code in tos/types gets included automatically
+
+# Code in the include directory is outside of normal TinyOS search path.
+PFLAGS += -I$(DEVICEANNOUNCEMENT_EXTRA_LOCATION)/include
 # --------------------------------------------------------------------
 #            ...
 # --------------------------------------------------------------------
