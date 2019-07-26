@@ -1,0 +1,6 @@
+language: c
+sudo: false
+script:
+  - make -C test
+  - cd test
+  - ./test-app

@@ -7,7 +7,7 @@
 #include "sec_tmilli.h"
 #include "Coordinates.h"
 #include "SemanticVersion.h"
-#include "DeviceAnnouncement.h"
+#include "DeviceAnnouncementProtocol.h"
 generic module DeviceAnnouncementP(uint8_t ifaces, uint8_t total_features) {
 	provides interface DeviceAnnouncement;
 	uses {
