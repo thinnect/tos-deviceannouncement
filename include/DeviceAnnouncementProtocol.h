@@ -10,7 +10,8 @@
 #define AMID_DEVICE_ANNOUNCEMENT 0xDA
 
 #define DEVICE_ANNOUNCEMENT_VERSION_V1 0x01
-#define DEVICE_ANNOUNCEMENT_VERSION 0x02
+#define DEVICE_ANNOUNCEMENT_VERSION_V2 0x02
+#define DEVICE_ANNOUNCEMENT_VERSION    0x02
 
 #ifndef NESC
 // This is a nesC header. If you wish to include it in a plain C project, it's
@@ -166,17 +167,5 @@ typedef nx_struct device_features {
 } device_features_t;
 // 2+8+4+2+0*16=12 -> 2+8+4+2+1*16=28 -> 2+8+4+2+6*16=108
 #pragma pack(pop)
-
-#ifdef NESC // TinyOS specific announcement module handling - TODO should not be here
-	#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID unique("DeviceAnnouncementCommunicationsInterface")
-	#define UQ_DEVICE_ANNOUNCEMENT_INTERFACE_COUNT uniqueCount("DeviceAnnouncementCommunicationsInterface")
-
-	#define UQ_DEVICE_FEATURE_INDEX unique("DeviceFeatureUuidIndex")
-	#define UQ_DEVICE_FEATURE_COUNT uniqueCount("DeviceFeatureUuidIndex")
-
-	enum DeviceAnnouncementInterfaceEnum {
-		DEVA_ANNOUNCEMENT_INTERFACE_ID = UQ_DEVICE_ANNOUNCEMENT_INTERFACE_ID
-	};
-#endif//NESC
 
 #endif // DEVICEANNOUNCEMENTPROTOCOL_H_
