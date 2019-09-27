@@ -24,9 +24,6 @@ implementation {
 	components LocalIeeeEui64C;
 	DeviceAnnouncementP.LocalIeeeEui64 -> LocalIeeeEui64C;
 
-	components PlatformUUIDC;
-	DeviceAnnouncementP.PlatformUuid128 -> PlatformUUIDC;
-
 	components ApplicationUUIDC;
 	DeviceAnnouncementP.ApplicationUuid128 -> ApplicationUUIDC;
 
@@ -41,11 +38,6 @@ implementation {
 	DeviceAnnouncementP.Lifetime -> BootsLifetimeC.Lifetime;
 	DeviceAnnouncementP.Uptime -> BootsLifetimeC.Uptime;
 	DeviceAnnouncementP.BootStable -> BootsLifetimeC;
-
-	components UserSignatureAreaC;
-	DeviceAnnouncementP.ProductionTime -> UserSignatureAreaC.ProductionTime;
-	DeviceAnnouncementP.ManufacturerUuid128 -> UserSignatureAreaC.ManufacturerUuid128;
-	DeviceAnnouncementP.PCBVersion -> UserSignatureAreaC.PCBVersion;
 
 	components new TimerMilliC();
 	DeviceAnnouncementP.Timer -> TimerMilliC;

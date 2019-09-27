@@ -16,15 +16,9 @@ generic module DeviceAnnouncementP(uint8_t ifaces, uint8_t total_features) {
 		interface Receive[uint8_t iface];
 		interface LocalIeeeEui64;
 
-		interface Get<semantic_version_t> as PCBVersion;
-
-		interface GetStruct<uuid_t> as PlatformUuid128;
 		interface GetStruct<uuid_t> as ApplicationUuid128;
-		interface GetStruct<uuid_t> as ManufacturerUuid128;
 
 		interface GetStruct<uuid_t> as DeviceFeatureUuid128[uint8_t fidx];
-
-		interface Get<time64_t> as ProductionTime;
 
 		interface GetStruct<coordinates_geo_t> as GetGeo;
 
@@ -199,20 +193,16 @@ implementation {
 				if(version == 1) {
 					device_description_v1_t* anc = (device_description_v1_t*)call AMSend.getPayload[iface](msg, sizeof(device_description_v1_t));
 					if(anc != NULL) {
-						uuid_t uuid;
-
 						anc->header = DEVA_DESCRIPTION;
 						anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 						memcpy(anc->guid, guid.data, sizeof(anc->guid));
 						anc->boot_number = call BootNumber.get();
 
-						call PlatformUuid128.get(&uuid);
-						hton_uuid(&(anc->platform), &uuid);
+						sigGetPlatformUUID((uint8_t*)&(anc->platform));
 
-						call ManufacturerUuid128.get(&uuid);
-						hton_uuid(&(anc->manufacturer), &uuid);
+						sigGetPlatformManufacturerUUID((uint8_t*)&(anc->manufacturer));
 
-						anc->production = call ProductionTime.get();
+						anc->production = sigGetPlatformProductionTime();
 
 						anc->ident_timestamp = IDENT_TIMESTAMP;
 						anc->sw_major_version = SW_MAJOR_VERSION;
@@ -225,25 +215,22 @@ implementation {
 				else {
 					device_description_v2_t* anc = (device_description_v2_t*)call AMSend.getPayload[iface](msg, sizeof(device_description_v2_t));
 					if(anc != NULL) {
-						uuid_t uuid;
-						semantic_version_t hwv = call PCBVersion.get();
+						semver_t hwv = sigGetPlatformVersion();
 
 						anc->header = DEVA_DESCRIPTION;
 						anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 						memcpy(anc->guid, guid.data, sizeof(anc->guid));
 						anc->boot_number = call BootNumber.get();
 
-						call PlatformUuid128.get(&uuid);
-						hton_uuid(&(anc->platform), &uuid);
+						sigGetPlatformUUID((uint8_t*)&(anc->platform));
 
 						anc->hw_major_version = hwv.major;
 						anc->hw_minor_version = hwv.minor;
 						anc->hw_assem_version = hwv.patch;
 
-						call ManufacturerUuid128.get(&uuid);
-						hton_uuid(&(anc->manufacturer), &uuid);
+						sigGetPlatformManufacturerUUID((uint8_t*)&(anc->manufacturer));
 
-						anc->production = call ProductionTime.get();
+						anc->production = sigGetPlatformProductionTime();
 
 						anc->ident_timestamp = IDENT_TIMESTAMP;
 						anc->sw_major_version = SW_MAJOR_VERSION;
