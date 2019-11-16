@@ -19,6 +19,7 @@
 #include "device_announcement.h"
 #include "device_features.h"
 
+#include "time64.h"
 #include "nesc_to_c_compat.h"
 
 uint32_t test_errors = 0;
