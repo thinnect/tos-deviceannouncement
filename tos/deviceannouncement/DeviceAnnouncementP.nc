@@ -30,6 +30,9 @@ generic module DeviceAnnouncementP(uint8_t ifaces, uint8_t total_features) {
 		interface Random;
 		interface Crc;
 
+		// Compile-time UUID fallback for older device signatures
+		interface GetStruct<uuid_t> as PlatformUuid128;
+
 		interface Get<uint32_t> as BootNumber;
 		interface Get<uint32_t> as Lifetime;
 		interface Get<uint32_t> as Uptime;
@@ -198,7 +201,11 @@ implementation {
 						memcpy(anc->guid, guid.data, sizeof(anc->guid));
 						anc->boot_number = call BootNumber.get();
 
-						sigGetPlatformUUID((uint8_t*)&(anc->platform));
+						if(SIG_GOOD != sigGetPlatformUUID((uint8_t*)&(anc->platform))) {
+							uuid_t uuid;
+							call PlatformUuid128.get(&uuid);
+							hton_uuid(&(anc->platform), &uuid);
+						}
 
 						sigGetPlatformManufacturerUUID((uint8_t*)&(anc->manufacturer));
 
@@ -222,7 +229,11 @@ implementation {
 						memcpy(anc->guid, guid.data, sizeof(anc->guid));
 						anc->boot_number = call BootNumber.get();
 
-						sigGetPlatformUUID((uint8_t*)&(anc->platform));
+						if(SIG_GOOD != sigGetPlatformUUID((uint8_t*)&(anc->platform))) {
+							uuid_t uuid;
+							call PlatformUuid128.get(&uuid);
+							hton_uuid(&(anc->platform), &uuid);
+						}
 
 						anc->hw_major_version = hwv.major;
 						anc->hw_minor_version = hwv.minor;

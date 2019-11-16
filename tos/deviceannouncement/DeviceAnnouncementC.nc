@@ -5,6 +5,7 @@
  * @license MIT
  **/
 #include "DeviceAnnouncementProtocol.h"
+#include "DeviceAnnouncement.h"
 configuration DeviceAnnouncementC {
 	provides interface DeviceAnnouncement;
 	uses {
@@ -32,6 +33,10 @@ implementation {
 
 	components CoordinatesC;
 	DeviceAnnouncementP.GetGeo -> CoordinatesC.GetGeo;
+
+	// Compile-time UUID fallbacks for older device signatures
+	components HeaderC;
+	DeviceAnnouncementP.PlatformUuid128 -> HeaderC.PlatformUUID;
 
 	components BootsLifetimeC;
 	DeviceAnnouncementP.BootNumber -> BootsLifetimeC.BootNumber;

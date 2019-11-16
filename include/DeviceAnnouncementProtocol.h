@@ -13,6 +13,9 @@
 #define DEVICE_ANNOUNCEMENT_VERSION_V2 0x02
 #define DEVICE_ANNOUNCEMENT_VERSION    0x02
 
+#include "time64.h"
+#include "UniversallyUniqueIdentifier.h"
+
 #ifndef NESC
 // This is a nesC header. If you wish to include it in a plain C project, it's
 // your responsibility to provide the compatibility header below which provides
@@ -20,8 +23,6 @@
 // NB! All nx_* types use big endian. You need to manually convert those in C.
 # include "nesc_to_c_compat.h"
 #endif
-
-#include <UniversallyUniqueIdentifier.h>
 
 enum DeviceAnnouncementHeaderEnum {
 	DEVA_ANNOUNCEMENT    = 0x00,
