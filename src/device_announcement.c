@@ -34,20 +34,20 @@ extern void nx_uuid_application(nx_uuid_t* uuid);
 static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_t result, void *user);
 static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user);
 
-device_announcer_t* m_announcers;
-time64_t m_boot_time;
-bool m_busy;
-uint8_t m_announcements; // TODO should be announcer specific
+static device_announcer_t* m_announcers;
+static time64_t m_boot_time;
+static bool m_busy;
+static uint8_t m_announcements; // TODO should be announcer specific
 
-comms_msg_t m_msg_pool;
-comms_msg_t* m_msg_pool_msg = &m_msg_pool;
+static comms_msg_t m_msg_pool;
+static comms_msg_t* m_msg_pool_msg = &m_msg_pool;
 
-comms_msg_t* messagepool_get() {
+static comms_msg_t* messagepool_get() {
 	comms_msg_t* msg = m_msg_pool_msg;
 	m_msg_pool_msg = NULL;
 	return msg;
 }
-bool messagepool_put(comms_msg_t* msg) {
+static bool messagepool_put(comms_msg_t* msg) {
 	if(m_msg_pool_msg != NULL) {
 		return false;
 	}
@@ -365,6 +365,7 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 						device_announcement_v2_t* da = (device_announcement_v2_t*)payload;
 						infob1("anc %"PRIu32":%"PRIu32, da->guid, 8,
 							(uint32_t)(da->boot_number), (uint32_t)(da->uptime));
+						(void)da;
 						//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), da); // TODO a proper event?
 					}
 				}
