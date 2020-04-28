@@ -11,6 +11,7 @@
 #include "device_features.h"
 
 #include "cmsis_os2.h"
+#include "cmsis_os2_ext.h"
 
 #include "loglevels.h"
 #define __MODUUL__ "aapp"
@@ -45,7 +46,7 @@ int announcement_app_init(comms_layer_t * radio, uint16_t period_s)
 extern uint32_t osCounterMilliGet();
 
 uint32_t localtime_sec() {
-	return osCounterMilliGet()/1000;
+	return osCounterGetSecond();
 }
 
 uint32_t lifetime_sec() {
