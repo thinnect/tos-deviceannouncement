@@ -10,8 +10,9 @@
 #include "device_announcement.h"
 #include "device_features.h"
 
-#include "cmsis_os2.h"
 #include "cmsis_os2_ext.h"
+
+#include "time64.h"
 
 #include "loglevels.h"
 #define __MODUUL__ "aapp"

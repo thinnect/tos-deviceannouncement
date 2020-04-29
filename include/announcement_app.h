@@ -5,6 +5,8 @@
  * @license MIT
  * @author Raido Pahtma
  */
+#ifndef ANNOUNCEMENT_APP_H_
+#define ANNOUNCEMENT_APP_H_
 
 #include <stdint.h>
 
@@ -16,3 +18,5 @@
 * @return 0 on success.
 */
 int announcement_app_init(comms_layer_t * radio, uint16_t period_s);
+
+#endif//ANNOUNCEMENT_APP_H_
