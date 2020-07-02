@@ -31,6 +31,7 @@ extern time64_t realtimeclock(); // TODO header
 extern uint8_t radio_channel(); // TODO header
 extern void nx_uuid_application(nx_uuid_t* uuid);
 
+static void radio_status_changed (comms_layer_t* comms, comms_status_t status, void* user);
 static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_t result, void *user);
 static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user);
 
@@ -93,6 +94,10 @@ bool deva_add_announcer(device_announcer_t* announcer, comms_layer_t* comms, com
 	announcer->next = NULL;
 
 	comms_register_recv(comms, &(announcer->rcvr), radio_recv, announcer, AMID_DEVICE_ANNOUNCEMENT);
+
+	if(COMMS_SUCCESS != comms_register_sleep_controller(comms, rctrl, radio_status_changed, NULL)) {
+		err1("rctrl");
+	}
 
 	if(an == NULL) {
 		m_announcers = announcer;
@@ -333,7 +338,7 @@ static bool list_features(device_announcer_t* an, am_addr_t destination, uint8_t
 					while (COMMS_STARTED != comms_status(an->comms));
 				}
 
-				err = comms_send(an->comms, msg, radio_send_done, NULL);
+				err = comms_send(an->comms, msg, radio_send_done, an);
 
 				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
 				if(err == COMMS_SUCCESS) {
@@ -362,6 +367,11 @@ event void Timer.fired() {
 	scheduleNextAnnouncement();
 }
 */
+
+static void radio_status_changed (comms_layer_t* comms, comms_status_t status, void* user) {
+    // Actual status change is checked by polling, but the callback is mandatory
+}
+
 static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_t result, void *user) {
 	logger(result == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snt(%u)", result);
 

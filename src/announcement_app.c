@@ -24,13 +24,17 @@
 
 static device_announcer_t m_announcer;
 static comms_sleep_controller_t m_radio_ctrl;
-static osTimerId_t m_announcement_timer;
 
-static void announcement_timer_callback(void* argument)
+
+static void announcement_loop(void * arg)
 {
-	if (deva_poll())
+	for(;;)
 	{
-		debug1("snt");
+		osDelay(DEVICE_ANNOUNCEMENT_POLL_PERIOD_S*1000UL);
+		if (deva_poll())
+		{
+			debug1("snt");
+		}
 	}
 }
 
@@ -44,13 +48,15 @@ int announcement_app_init(comms_layer_t * radio, bool manage_radio, uint16_t per
 	else {
 		deva_add_announcer(&m_announcer, radio, NULL, period_s);
 	}
-	m_announcement_timer = osTimerNew(&announcement_timer_callback, osTimerPeriodic, NULL, NULL);
-	osTimerStart(m_announcement_timer, DEVICE_ANNOUNCEMENT_POLL_PERIOD_S*1000UL);
+
+    const osThreadAttr_t annc_thread_attr = { .name = "annc", .stack_size = 512 };
+    osThreadNew(announcement_loop, NULL, &annc_thread_attr);
+
 	return 0;
 }
 
 // Handle current tangling "dependencies"
-extern uint32_t osCounterMilliGet();
+//extern uint32_t osCounterMilliGet();
 
 uint32_t localtime_sec() {
 	return osCounterGetSecond();

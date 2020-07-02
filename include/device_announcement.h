@@ -64,11 +64,14 @@ bool deva_remove_announcer(device_announcer_t* announcer);
 struct device_announcer {
 	comms_layer_t* comms;
 	comms_sleep_controller_t* comms_ctrl;
+
 	comms_receiver_t rcvr;
+
 	uint16_t period; // minutes, 0 for never
 	bool busy;
 	uint32_t last;
 	uint32_t announcements;
+
 	device_announcer_t* next;
 };
 
