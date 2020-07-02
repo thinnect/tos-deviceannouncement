@@ -82,9 +82,10 @@ void deva_init() {
 	update_boot_time();
 }
 
-bool deva_add_announcer(device_announcer_t* announcer, comms_layer_t* comms, uint32_t period_s) {
+bool deva_add_announcer(device_announcer_t* announcer, comms_layer_t* comms, comms_sleep_controller_t* rctrl, uint32_t period_s) {
 	device_announcer_t* an = m_announcers;
 	announcer->comms = comms;
+	announcer->comms_ctrl = rctrl;
 	announcer->period = period_s;
 	announcer->busy = false;
 	announcer->last = localtime_sec(); // TODO introduce initial random here
@@ -110,14 +111,14 @@ bool deva_remove_announcer(device_announcer_t* announcer) {
 	return false;
 }
 
-static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destination) {
+static bool announce(device_announcer_t* an, uint8_t version, am_addr_t destination) {
 	if(!m_busy) {
 		comms_msg_t* msg = messagepool_get();
 		if(msg != NULL) {
 			uint8_t length = 0;
-			comms_init_message(comms, msg);
+			comms_init_message(an->comms, msg);
 			if(version == 1) {
-				device_announcement_v1_t* anc = (device_announcement_v1_t*)comms_get_payload(comms, msg, sizeof(device_announcement_v1_t));
+				device_announcement_v1_t* anc = (device_announcement_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v1_t));
 				if(anc != NULL) {
 					//coordinates_geo_t geo;
 
@@ -148,7 +149,7 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 				}
 			}
 			else {
-				device_announcement_v2_t* anc = (device_announcement_v2_t*)comms_get_payload(comms, msg, sizeof(device_announcement_v2_t));
+				device_announcement_v2_t* anc = (device_announcement_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v2_t));
 				if(anc != NULL) {
 					//coordinates_geo_t geo;
 
@@ -186,10 +187,16 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 
 			if(length > 0) {
 				comms_error_t err;
-				comms_set_packet_type(comms, msg, AMID_DEVICE_ANNOUNCEMENT);
-				comms_am_set_destination(comms, msg, destination);
-				comms_set_payload_length(comms, msg, length);
-				err = comms_send(comms, msg, radio_send_done, NULL);
+				comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
+				comms_am_set_destination(an->comms, msg, destination);
+				comms_set_payload_length(an->comms, msg, length);
+
+				if(NULL != an->comms_ctrl) {
+					comms_sleep_block(an->comms_ctrl);
+					while (COMMS_STARTED != comms_status(an->comms));
+				}
+
+				err = comms_send(an->comms, msg, radio_send_done, an);
 
 				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
 				if(err == COMMS_SUCCESS) {
@@ -204,14 +211,14 @@ static bool announce(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 	return false;
 }
 
-static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destination) {
+static bool describe(device_announcer_t* an, uint8_t version, am_addr_t destination) {
 	if(!m_busy) {
 		comms_msg_t* msg = messagepool_get();
 		if(msg != NULL) {
 			uint8_t length = 0;
-			comms_init_message(comms, msg);
+			comms_init_message(an->comms, msg);
 			if(version == 1) {
-				device_description_v1_t* anc = (device_description_v1_t*)comms_get_payload(comms, msg, sizeof(device_description_v1_t));
+				device_description_v1_t* anc = (device_description_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v1_t));
 				if(anc != NULL) {
 					anc->header = DEVA_DESCRIPTION;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
@@ -232,7 +239,7 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 				}
 			}
 			else {
-				device_description_v2_t* anc = (device_description_v2_t*)comms_get_payload(comms, msg, sizeof(device_description_v2_t));
+				device_description_v2_t* anc = (device_description_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v2_t));
 				if(anc != NULL) {
 					semver_t hwv = sigGetPlatformVersion();
 
@@ -261,10 +268,16 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 
 			if(length > 0) {
 				comms_error_t err;
-				comms_set_packet_type(comms, msg, AMID_DEVICE_ANNOUNCEMENT);
-				comms_am_set_destination(comms, msg, destination);
-				comms_set_payload_length(comms, msg, length);
-				err = comms_send(comms, msg, radio_send_done, NULL);
+				comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
+				comms_am_set_destination(an->comms, msg, destination);
+				comms_set_payload_length(an->comms, msg, length);
+
+				if(NULL != an->comms_ctrl) {
+					comms_sleep_block(an->comms_ctrl);
+					while (COMMS_STARTED != comms_status(an->comms));
+				}
+
+				err = comms_send(an->comms, msg, radio_send_done, an);
 
 				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
 				if(err == COMMS_SUCCESS) {
@@ -279,13 +292,13 @@ static bool describe(comms_layer_t* comms, uint8_t version, am_addr_t destinatio
 	return false;
 }
 
-static bool list_features(comms_layer_t* comms, am_addr_t destination, uint8_t offset) {
+static bool list_features(device_announcer_t* an, am_addr_t destination, uint8_t offset) {
 	if(!m_busy) {
 		comms_msg_t* msg = messagepool_get();
 		if(msg != NULL) {
-			uint8_t space = (comms_get_payload_max_length(comms) - sizeof(device_features_t)) / sizeof(uuid_t);
-			device_features_t* anc = (device_features_t*)comms_get_payload(comms, msg, sizeof(device_features_t) + space*sizeof(uuid_t));
-			comms_init_message(comms, msg);
+			uint8_t space = (comms_get_payload_max_length(an->comms) - sizeof(device_features_t)) / sizeof(uuid_t);
+			device_features_t* anc = (device_features_t*)comms_get_payload(an->comms, msg, sizeof(device_features_t) + space*sizeof(uuid_t));
+			comms_init_message(an->comms, msg);
 			if(anc != NULL) {
 				uint8_t total_features = devf_count();
 				comms_error_t err;
@@ -311,10 +324,16 @@ static bool list_features(comms_layer_t* comms, am_addr_t destination, uint8_t o
 
 				debugb1("ftrs %u total %u", anc, sizeof(device_features_t)+ftrs*sizeof(nx_uuid_t), ftrs, anc->total);
 
-				comms_set_packet_type(comms, msg, AMID_DEVICE_ANNOUNCEMENT);
-				comms_am_set_destination(comms, msg, destination);
-				comms_set_payload_length(comms, msg, sizeof(device_features_t) + ftrs*sizeof(uuid_t));
-				err = comms_send(comms, msg, radio_send_done, NULL);
+				comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
+				comms_am_set_destination(an->comms, msg, destination);
+				comms_set_payload_length(an->comms, msg, sizeof(device_features_t) + ftrs*sizeof(uuid_t));
+
+				if(NULL != an->comms_ctrl) {
+					comms_sleep_block(an->comms_ctrl);
+					while (COMMS_STARTED != comms_status(an->comms));
+				}
+
+				err = comms_send(an->comms, msg, radio_send_done, NULL);
 
 				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
 				if(err == COMMS_SUCCESS) {
@@ -345,11 +364,18 @@ event void Timer.fired() {
 */
 static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_t result, void *user) {
 	logger(result == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snt(%u)", result);
+
+	device_announcer_t * an = (device_announcer_t*)user;
+	if(NULL != an->comms_ctrl) {
+		comms_sleep_allow(an->comms_ctrl);
+	}
+
 	messagepool_put(msg);
 	m_busy = false;
 }
 
 static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user) {
+	device_announcer_t * an = (device_announcer_t*)user;
 	uint8_t len = comms_get_payload_length(comms, msg);
 	uint8_t* payload = comms_get_payload(comms, msg, len);
 	debugb1("rcv[%p]", payload, len, user);
@@ -411,19 +437,19 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 
 			case DEVA_QUERY: {
 				info1("qry[%p] v%d %04X", comms, version, comms_am_get_source(comms, msg));
-				announce(comms, version, comms_am_get_source(comms, msg));
+				announce(an, version, comms_am_get_source(comms, msg));
 			}
 			break;
 
 			case DEVA_DESCRIBE:
 				info1("dsc[%p] %04X", comms, comms_am_get_source(comms, msg));
-				describe(comms, version, comms_am_get_source(comms, msg));
+				describe(an, version, comms_am_get_source(comms, msg));
 			break;
 
 			case DEVA_LIST_FEATURES:
 				if(len >= 3) {
 					info1("lst[%p] %04X", comms, comms_am_get_source(comms, msg));
-					list_features(comms, comms_am_get_source(comms, msg), ((uint8_t*)payload)[2]);
+					list_features(an, comms_am_get_source(comms, msg), ((uint8_t*)payload)[2]);
 				}
 			break;
 
@@ -445,7 +471,7 @@ bool deva_poll() {
 	while(an != NULL) {
 		if((an->period > 0)
 		 &&(an->last + next_announcement(an->announcements, an->period) <= now)) {
-			if(announce(an->comms, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR)) {
+			if(announce(an, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR)) {
 				an->last = now;
 				an->announcements++;
 				m_announcements++;

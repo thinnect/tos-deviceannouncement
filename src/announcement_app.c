@@ -23,6 +23,7 @@
 #define DEVICE_ANNOUNCEMENT_POLL_PERIOD_S 60
 
 static device_announcer_t m_announcer;
+static comms_sleep_controller_t m_radio_ctrl;
 static osTimerId_t m_announcement_timer;
 
 static void announcement_timer_callback(void* argument)
@@ -33,11 +34,16 @@ static void announcement_timer_callback(void* argument)
 	}
 }
 
-int announcement_app_init(comms_layer_t * radio, uint16_t period_s)
+int announcement_app_init(comms_layer_t * radio, bool manage_radio, uint16_t period_s)
 {
 	debug1("deva init");
 	deva_init();
-	deva_add_announcer(&m_announcer, radio, period_s);
+	if(manage_radio) {
+		deva_add_announcer(&m_announcer, radio, &m_radio_ctrl, period_s);
+	}
+	else {
+		deva_add_announcer(&m_announcer, radio, NULL, period_s);
+	}
 	m_announcement_timer = osTimerNew(&announcement_timer_callback, osTimerPeriodic, NULL, NULL);
 	osTimerStart(m_announcement_timer, DEVICE_ANNOUNCEMENT_POLL_PERIOD_S*1000UL);
 	return 0;

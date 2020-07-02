@@ -29,11 +29,15 @@ bool deva_poll();
 /**
  * Add an announcer for the specified comms layer and with the specified period.
  * @param announcer Memory for an announcer, make sure it does not go out of scope!
- * @param comms A comms layer.
+ * @param comms A comms layer to use for announcements.
+ * @param rctrl An optional comms sleep controller (NULL if layer does not need to be controlled).
+ *              The controller must be persistently allocated, but uninitialized.
  * @param period_s Announcement period, set to 0 for no announcements.
  * @return true if an announcer was added.
  */
-bool deva_add_announcer(device_announcer_t* announcer, comms_layer_t* comms, uint32_t period_s);
+bool deva_add_announcer(device_announcer_t* announcer,
+                        comms_layer_t* comms, comms_sleep_controller_t* rctrl,
+                        uint32_t period_s);
 
 /**
  * Remove an announcer.
@@ -59,6 +63,7 @@ bool deva_remove_announcer(device_announcer_t* announcer);
  */
 struct device_announcer {
 	comms_layer_t* comms;
+	comms_sleep_controller_t* comms_ctrl;
 	comms_receiver_t rcvr;
 	uint16_t period; // minutes, 0 for never
 	bool busy;
