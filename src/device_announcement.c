@@ -95,8 +95,10 @@ bool deva_add_announcer(device_announcer_t* announcer, comms_layer_t* comms, com
 
 	comms_register_recv(comms, &(announcer->rcvr), radio_recv, announcer, AMID_DEVICE_ANNOUNCEMENT);
 
-	if(COMMS_SUCCESS != comms_register_sleep_controller(comms, rctrl, radio_status_changed, NULL)) {
-		err1("rctrl");
+	if(NULL != rctrl) {
+		if(COMMS_SUCCESS != comms_register_sleep_controller(comms, rctrl, radio_status_changed, NULL)) {
+			err1("rctrl");
+		}
 	}
 
 	if(an == NULL) {

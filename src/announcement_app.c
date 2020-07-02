@@ -49,7 +49,7 @@ int announcement_app_init(comms_layer_t * radio, bool manage_radio, uint16_t per
 		deva_add_announcer(&m_announcer, radio, NULL, period_s);
 	}
 
-    const osThreadAttr_t annc_thread_attr = { .name = "annc", .stack_size = 512 };
+    const osThreadAttr_t annc_thread_attr = { .name = "annc"};
     osThreadNew(announcement_loop, NULL, &annc_thread_attr);
 
 	return 0;

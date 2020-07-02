@@ -130,7 +130,7 @@ int testPeriodicAnnouncements() {
 
 	uint8_t r1[512];
 	comms_layer_t* radio = (comms_layer_t*)r1;
-	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send1);
+	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send1, NULL, NULL);
 	printf("create radio=%d\n", err);
 
 	sigAreaInit("fakesignature.bin");
@@ -138,7 +138,7 @@ int testPeriodicAnnouncements() {
 
 	device_announcer_t announcer;
 	deva_init();
-	deva_add_announcer(&announcer, radio, 10);
+	deva_add_announcer(&announcer, radio, NULL, 10);
 
 	for(uint8_t i=0;i<60;i++) {
 		deva_poll();
@@ -204,7 +204,7 @@ int testDescriptionResponse() {
 
 	uint8_t r1[512];
 	comms_layer_t* radio = (comms_layer_t*)r1;
-	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send2);
+	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send2, NULL, NULL);
 	printf("create radio=%d\n", err);
 
 	sigAreaInit("fakesignature.bin");
@@ -212,7 +212,7 @@ int testDescriptionResponse() {
 
 	device_announcer_t announcer;
 	deva_init();
-	deva_add_announcer(&announcer, radio, 0);
+	deva_add_announcer(&announcer, radio, NULL, 0);
 
 	for(uint8_t i=0;i<60;i++) {
 		deva_poll();
@@ -329,7 +329,7 @@ int testListFeaturesResponse() {
 
 	uint8_t r1[512];
 	comms_layer_t* radio = (comms_layer_t*)r1;
-	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send3);
+	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send3, NULL, NULL);
 	printf("create radio=%d\n", err);
 
 	sigAreaInit("fakesignature.bin");
@@ -343,7 +343,7 @@ int testListFeaturesResponse() {
 
 	device_announcer_t announcer;
 	deva_init();
-	deva_add_announcer(&announcer, radio, 0);
+	deva_add_announcer(&announcer, radio, NULL, 0);
 
 	for(uint8_t i=0;i<30;i++) {
 		deva_poll();
