@@ -51,5 +51,5 @@ test-app: $(OBJS)
 	gcc -c -o $@ $< $(CFLAGS)
 
 clean:
-	rm *.o
-	rm test-app
+	rm -f *.o
+	rm -f test-app
