@@ -15,16 +15,9 @@
 typedef struct device_announcer device_announcer_t;
 
 /**
- * Initialize the device announcement module. Call it once after boot.
+ * Initialize the device announcement module. Call it once after kernel has started.
  */
 void deva_init();
-
-/**
- * Device announcement module poll. Call it occasionally to have spontaneous
- * announcement sent out.
- * @return true if an announcement was sent.
- */
-bool deva_poll();
 
 /**
  * Add an announcer for the specified comms layer and with the specified period.

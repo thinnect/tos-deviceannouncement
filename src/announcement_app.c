@@ -1,7 +1,5 @@
 /**
- * Device announcement setup.
- *
- * Use a timer to poll the announcement module.
+ * Device announcement support functions.
  *
  * Copyright Thinnect Inc. 2019
  * @license MIT
@@ -14,56 +12,8 @@
 
 #include "time64.h"
 
-#include "loglevels.h"
-#define __MODUUL__ "aapp"
-#define __LOG_LEVEL__ (LOG_LEVEL_announcement_app & BASE_LOG_LEVEL)
-#include "log.h"
-
-// How often the announcement module is polled
-#define DEVICE_ANNOUNCEMENT_POLL_PERIOD_S 60
-
-static device_announcer_t m_announcer;
-static comms_sleep_controller_t m_radio_ctrl;
-
-
-static void announcement_loop(void * arg)
-{
-	for(;;)
-	{
-		osDelay(DEVICE_ANNOUNCEMENT_POLL_PERIOD_S*1000UL);
-		if (deva_poll())
-		{
-			debug1("snt");
-		}
-	}
-}
-
-int announcement_app_init(comms_layer_t * radio, bool manage_radio, uint16_t period_s)
-{
-	debug1("deva init");
-	deva_init();
-	if(manage_radio) {
-		deva_add_announcer(&m_announcer, radio, &m_radio_ctrl, period_s);
-	}
-	else {
-		deva_add_announcer(&m_announcer, radio, NULL, period_s);
-	}
-
-    const osThreadAttr_t annc_thread_attr = { .name = "annc"};
-    osThreadNew(announcement_loop, NULL, &annc_thread_attr);
-
-	return 0;
-}
-
-// Handle current tangling "dependencies"
-//extern uint32_t osCounterMilliGet();
-
-uint32_t localtime_sec() {
-	return osCounterGetSecond();
-}
-
 uint32_t lifetime_sec() {
-	return localtime_sec() + 100;
+	return osCounterGetSecond() + 100;
 }
 
 uint32_t lifetime_boots() {
