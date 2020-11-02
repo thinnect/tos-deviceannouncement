@@ -10,8 +10,11 @@
 #include "device_features.h"
 #include "DeviceSignature.h"
 
+#include <time.h>
 #include <string.h>
 #include <inttypes.h>
+
+#include "node_lifetime.h"
 
 #include "endianness.h"
 
@@ -28,11 +31,7 @@
 // How often the announcement module is polled
 #define DEVICE_ANNOUNCEMENT_POLL_PERIOD_S 60
 
-extern uint32_t lifetime_sec(); // TODO header
-extern uint32_t lifetime_boots(); // TODO header
-extern time64_t realtimeclock(); // TODO header
 extern uint8_t radio_channel(); // TODO header
-extern void nx_uuid_application(nx_uuid_t* uuid);
 
 static bool unguarded_deva_poll();
 
@@ -41,7 +40,7 @@ static void radio_send_done (comms_layer_t *comms, comms_msg_t *msg, comms_error
 static void radio_recv (comms_layer_t* comms, const comms_msg_t *msg, void *user);
 
 static device_announcer_t* m_announcers;
-static time64_t m_boot_time;
+static time_t m_boot_time;
 static bool m_busy;
 static uint8_t m_announcements; // TODO should be announcer specific
 
@@ -49,6 +48,10 @@ static comms_msg_t m_msg_pool;
 static comms_msg_t* m_msg_pool_msg = &m_msg_pool;
 
 static osMutexId_t m_mutex;
+
+static void nx_uuid_application(nx_uuid_t* uuid) {
+	memcpy(uuid, UUID_APPLICATION_BYTES, 16);
+}
 
 static comms_msg_t* messagepool_get() {
 	comms_msg_t* msg = m_msg_pool_msg;
@@ -74,9 +77,9 @@ static uint32_t next_announcement(uint32_t announcements, uint16_t period) {
 }
 
 static void update_boot_time() {
-	if(m_boot_time == ((time64_t)-1)) { // Adjust boot time only when it is not known
-		time64_t now = realtimeclock();
-		if(now != ((time64_t)-1)) {
+	if(m_boot_time == ((time_t)-1)) { // Adjust boot time only when it is not known
+		time_t now = time(NULL);
+		if(((time_t)-1) != now) {
 			m_boot_time = now - osCounterGetSecond();
 		}
 	}
@@ -96,7 +99,7 @@ static void announcement_loop(void * arg) {
 
 void deva_init() {
 	m_announcers = NULL;
-	m_boot_time = ((time64_t)-1);
+	m_boot_time = ((time_t)-1);
 	m_busy = false;
 	m_announcements = 0;
 	update_boot_time();
@@ -162,11 +165,11 @@ static bool announce(device_announcer_t* an, uint8_t version, am_addr_t destinat
 					anc->header = DEVA_ANNOUNCEMENT;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(lifetime_boots());
+					anc->boot_number = hton32(node_lifetime_boots());
 
 					anc->boot_time = hton64(m_boot_time);
 					anc->uptime = hton32(osCounterGetSecond());
-					anc->lifetime = hton32(lifetime_sec());
+					anc->lifetime = hton32(node_lifetime_seconds());
 					anc->announcement = hton32(m_announcements);
 
 					nx_uuid_application(&(anc->uuid));
@@ -193,11 +196,11 @@ static bool announce(device_announcer_t* an, uint8_t version, am_addr_t destinat
 					anc->header = DEVA_ANNOUNCEMENT;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(lifetime_boots());
+					anc->boot_number = hton32(node_lifetime_boots());
 
 					anc->boot_time = hton64(m_boot_time);
 					anc->uptime = hton32(osCounterGetSecond());
-					anc->lifetime = hton32(lifetime_sec());
+					anc->lifetime = hton32(node_lifetime_seconds());
 					anc->announcement = hton32(m_announcements);
 
 					nx_uuid_application(&(anc->uuid));
@@ -260,7 +263,7 @@ static bool describe(device_announcer_t* an, uint8_t version, am_addr_t destinat
 					anc->header = DEVA_DESCRIPTION;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(lifetime_boots());
+					anc->boot_number = hton32(node_lifetime_boots());
 
 					sigGetPlatformUUID((uint8_t*)&(anc->platform));
 
@@ -283,7 +286,7 @@ static bool describe(device_announcer_t* an, uint8_t version, am_addr_t destinat
 					anc->header = DEVA_DESCRIPTION;
 					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(lifetime_boots());
+					anc->boot_number = hton32(node_lifetime_boots());
 
 					sigGetPlatformUUID((uint8_t*)&(anc->platform));
 
@@ -345,7 +348,7 @@ static bool list_features(device_announcer_t* an, am_addr_t destination, uint8_t
 				anc->header = DEVA_FEATURES;
 				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 				sigGetEui64((uint8_t*)anc->guid);
-				anc->boot_number = hton32(lifetime_boots());
+				anc->boot_number = hton32(node_lifetime_boots());
 
 				anc->total = total_features;
 				anc->offset = offset;
