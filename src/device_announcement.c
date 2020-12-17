@@ -97,7 +97,7 @@ static void announcement_loop(void * arg) {
 	}
 }
 
-void deva_init() {
+bool deva_init() {
 	m_announcers = NULL;
 	m_boot_time = ((time_t)-1);
 	m_busy = false;
@@ -106,8 +106,13 @@ void deva_init() {
 
 	m_mutex = osMutexNew(NULL);
 
-    const osThreadAttr_t annc_thread_attr = { .name = "annc"};
-    osThreadNew(announcement_loop, NULL, &annc_thread_attr);
+    const osThreadAttr_t annc_thread_attr = { .name = "annc", .stack_size = 1536 };
+    osThreadId_t thrd = osThreadNew(announcement_loop, NULL, &annc_thread_attr);
+    if (NULL == thrd)
+    {
+    	return false;
+    }
+    return true;
 }
 
 bool deva_add_announcer(device_announcer_t* announcer, comms_layer_t* comms, comms_sleep_controller_t* rctrl, uint32_t period_s) {

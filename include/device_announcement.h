@@ -16,8 +16,9 @@ typedef struct device_announcer device_announcer_t;
 
 /**
  * Initialize the device announcement module. Call it once after kernel has started.
+ * return true if successfully initialized and task created.
  */
-void deva_init();
+bool deva_init();
 
 /**
  * Add an announcer for the specified comms layer and with the specified period.
