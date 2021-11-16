@@ -4,6 +4,16 @@ CFLAGS += -I.
 CFLAGS += -I../include
 CFLAGS += -I../tos/deviceannouncement
 
+# node_lifetime.h
+CFLAGS += -I/home/raido/workspace/beatbase-freertos-silabs-new/zoo/thinnect.node-platform/include
+# cmsis_os2_ext.h
+CFLAGS += -I/home/raido/workspace/beatbase-freertos-silabs-new/zoo/thinnect.cmsis-ext
+
+# cmsis_os2.h
+CFLAGS += -I/home/raido/workspace/beatbase-freertos-silabs-new/zoo/silabs.sdk/v2.7/platform/CMSIS/RTOS2/Include
+
+CFLAGS += -DUUID_APPLICATION_BYTES=\"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\"
+
 CFLAGS += -Izoo/thinnect.mist-comm/include
 CFLAGS += -Izoo/thinnect.mist-comm/include/compat
 CFLAGS += -Izoo/thinnect.mist-comm/mock

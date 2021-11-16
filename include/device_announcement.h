@@ -16,12 +16,14 @@ typedef struct device_announcer device_announcer_t;
 
 /**
  * Initialize the device announcement module. Call it once after kernel has started.
- * return true if successfully initialized and task created.
+ * *
+ * @return true if successfully initialized and task created.
  */
 bool deva_init();
 
 /**
  * Add an announcer for the specified comms layer and with the specified period.
+ *
  * @param announcer Memory for an announcer, make sure it does not go out of scope!
  * @param comms A comms layer to use for announcements.
  * @param rctrl An optional comms sleep controller (NULL if layer does not need to be controlled).
@@ -35,6 +37,7 @@ bool deva_add_announcer(device_announcer_t* announcer,
 
 /**
  * Remove an announcer.
+ *
  * @param announcer A previously registered announcer.
  * @return true if an announcer was removed.
  */
@@ -56,8 +59,8 @@ bool deva_remove_announcer(device_announcer_t* announcer);
  * You should not access this struct directly from the outside!
  */
 struct device_announcer {
-	comms_layer_t* comms;
-	comms_sleep_controller_t* comms_ctrl;
+	comms_layer_t * comms;
+	comms_sleep_controller_t * comms_ctrl;
 
 	comms_receiver_t rcvr;
 
@@ -66,7 +69,7 @@ struct device_announcer {
 	uint32_t last;
 	uint32_t announcements;
 
-	device_announcer_t* next;
+	device_announcer_t * next;
 };
 
 #endif//DEVICE_ANNOUNCEMENT_H_
