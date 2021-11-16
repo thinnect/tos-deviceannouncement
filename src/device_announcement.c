@@ -436,22 +436,25 @@ static bool list_features(device_announcer_t* an, am_addr_t destination, uint8_t
 		else warn1("pool");
 	}
 	else warn1("bsy");
-	
+
 	return false;
 }
 
 
-static void radio_status_changed (comms_layer_t* comms, comms_status_t status, void* user) {
+static void radio_status_changed (comms_layer_t * comms, comms_status_t status, void * user)
+{
     // Actual status change is checked by polling, but the callback is mandatory
 }
 
-static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_t result, void *user) {
+static void radio_send_done (comms_layer_t * comms, comms_msg_t * msg, comms_error_t result, void * user)
+{
 	logger(result == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snt(%d)", (int)result);
 
 	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
 
 	device_announcer_t * an = (device_announcer_t*)user;
-	if (NULL != an->comms_ctrl) {
+	if (NULL != an->comms_ctrl)
+	{
 		comms_sleep_allow(an->comms_ctrl);
 	}
 
@@ -461,23 +464,29 @@ static void radio_send_done(comms_layer_t *comms, comms_msg_t *msg, comms_error_
 	osMutexRelease(m_mutex);
 }
 
-static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user) {
+static void radio_recv (comms_layer_t * comms, const comms_msg_t * msg, void * user)
+{
 	uint8_t len = comms_get_payload_length(comms, msg);
-	uint8_t* payload = comms_get_payload(comms, msg, len);
+	uint8_t * payload = comms_get_payload(comms, msg, len);
 	debugb1("rcv[%p]", payload, len, user);
 
 	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
 
 	device_announcer_t * an = (device_announcer_t*)user;
-	if (len >= 2) {
+	if (len >= 2)
+	{
 		uint8_t version = ((uint8_t*)payload)[1];
-		if (version > DEVICE_ANNOUNCEMENT_VERSION) {
+		if (version > DEVICE_ANNOUNCEMENT_VERSION)
+		{
 			version = DEVICE_ANNOUNCEMENT_VERSION;
 		}
-		switch(((uint8_t*)payload)[0]) {
+		switch (((uint8_t*)payload)[0])
+		{
 			case DEVA_ANNOUNCEMENT:
-				if (version == DEVICE_ANNOUNCEMENT_VERSION) { // version 2
-					if (len >= sizeof(device_announcement_v2_t)) {
+				if (version == DEVICE_ANNOUNCEMENT_VERSION)
+				{ // version 2
+					if (len >= sizeof(device_announcement_v2_t))
+					{
 						device_announcement_v2_t* da = (device_announcement_v2_t*)payload;
 						infob1("anc %"PRIu32":%"PRIu32, da->guid, 8,
 							(uint32_t)(da->boot_number), (uint32_t)(da->uptime));
@@ -485,8 +494,10 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 						//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), da); // TODO a proper event?
 					}
 				}
-				else if (version == 1) { // version 1 - upgrade to current version structure
-					if (len >= sizeof(device_announcement_v1_t)) {
+				else if (version == 1)
+				{ // version 1 - upgrade to current version structure
+					if (len >= sizeof(device_announcement_v1_t))
+					{
 						device_announcement_v1_t* da1 = (device_announcement_v1_t*)payload;
 						device_announcement_v2_t da;
 
@@ -519,13 +530,15 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 						//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), &da); // TODO a proper event?
 					}
 				}
-				else {
+				else
+				{
 					warn1("%04X ver %u", comms_am_get_source(comms, msg),
 						((uint8_t*)payload)[1]); // Unknown version ... what to do?
 				}
 			break;
 
-			case DEVA_QUERY: {
+			case DEVA_QUERY:
+			{
 				info1("qry[%p] v%d %04X", comms, version, comms_am_get_source(comms, msg));
 				announce(an, version, comms_am_get_source(comms, msg));
 			}
@@ -537,7 +550,8 @@ static void radio_recv(comms_layer_t* comms, const comms_msg_t *msg, void *user)
 			break;
 
 			case DEVA_LIST_FEATURES:
-				if (len >= 3) {
+				if (len >= 3)
+				{
 					info1("lst[%p] %04X", comms, comms_am_get_source(comms, msg));
 					list_features(an, comms_am_get_source(comms, msg), ((uint8_t*)payload)[2]);
 				}
