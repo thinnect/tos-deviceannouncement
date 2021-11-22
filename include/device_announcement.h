@@ -11,15 +11,17 @@
 #include <stdbool.h>
 
 #include "mist_comm.h"
+#include "mist_comm_pool.h"
 
 typedef struct device_announcer device_announcer_t;
 
 /**
  * Initialize the device announcement module. Call it once after kernel has started.
- * *
+ *
+ * @param p_msg_pool Pointer to a message pool.
  * @return true if successfully initialized and task created.
  */
-bool deva_init();
+bool deva_init (comms_pool_t * p_msg_pool);
 
 /**
  * Add an announcer for the specified comms layer and with the specified period.
@@ -59,14 +61,15 @@ bool deva_remove_announcer(device_announcer_t* announcer);
  * You should not access this struct directly from the outside!
  */
 struct device_announcer {
+    comms_receiver_t rcvr;
+
 	comms_layer_t * comms;
+
 	comms_sleep_controller_t * comms_ctrl;
 
-	comms_receiver_t rcvr;
-
 	uint16_t period; // minutes, 0 for never
-	bool busy;
-	uint32_t last;
+
+    uint32_t last;
 	uint32_t announcements;
 
 	device_announcer_t * next;

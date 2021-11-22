@@ -15,6 +15,7 @@
 #include <inttypes.h>
 
 #include "node_lifetime.h"
+#include "node_coordinates.h"
 
 #include "endianness.h"
 
@@ -22,53 +23,76 @@
 
 #include "mist_comm.h"
 #include "mist_comm_am.h"
+#include "mist_comm_pool.h"
 
 #include "loglevels.h"
 #define __MODUUL__ "DevA"
 #define __LOG_LEVEL__ ( LOG_LEVEL_device_announcement & BASE_LOG_LEVEL )
 #include "log.h"
+#include "sys_panic.h"
+
+#define DEVA_MIN_PERIOD_S 10
+#define DEVA_MAX_PERIOD_S (365*24*3600)
+
+/**
+ * A structure for communicating data or actions from radio thread
+ * into the announcement thread.
+ **/
+typedef struct announcement_action {
+	device_announcer_t * p_anc;
+
+	enum DeviceAnnouncementHeaderEnum action;
+
+	union { // Based on the action
+		// For incoming messages with context that might need to be forwarded
+		comms_msg_t * p_msg;
+
+		// For requests about this device
+		struct {
+			am_addr_t address;
+			uint8_t version;
+			uint8_t offset;
+		} request;
+	} info;
+} announcement_action_t;
+
+
+#define ANNC_FLAG_SNT (1 << 0)
+#define ANNC_FLAG_RCV (1 << 1)
+#define ANNC_FLAG_NEW (1 << 2)
+#define ANNC_FLAGS    (   0x7)
+
 
 // How often the announcement module is polled
 #define DEVICE_ANNOUNCEMENT_POLL_PERIOD_S 60
 
 extern uint8_t radio_channel (void); // TODO header
 
-static bool unguarded_deva_poll (void);
+static comms_msg_t * handle_action (const announcement_action_t * aa);
+static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr_t destination);
 
 static void radio_status_changed (comms_layer_t * comms, comms_status_t status, void * user);
 static void radio_send_done (comms_layer_t * comms, comms_msg_t * msg, comms_error_t result, void * user);
-static void radio_recv (comms_layer_t * comms, const comms_msg_t * msg, void * user);
+static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void * user);
+
 
 static device_announcer_t * mp_announcers;
-static time_t m_boot_time;
-static bool m_busy;
 
-static comms_msg_t m_msg_pool;
-static comms_msg_t * mp_msg_pool = &m_msg_pool;
+static time_t m_boot_time;
 
 static osMutexId_t m_mutex;
+static osThreadId_t m_thread_id;
+
+static osMessageQueueId_t m_action_queue;
+
+static comms_pool_t * mp_pool;
+
 
 static void nx_uuid_application (nx_uuid_t * uuid)
 {
 	memcpy(uuid, UUID_APPLICATION_BYTES, 16);
 }
 
-static comms_msg_t * messagepool_get (void)
-{
-	comms_msg_t * msg = mp_msg_pool;
-	mp_msg_pool = NULL;
-	return msg;
-}
-
-static bool messagepool_put (comms_msg_t * msg)
-{
-	if (NULL != mp_msg_pool)
-	{
-		return false;
-	}
-	mp_msg_pool = msg;
-	return true;
-}
 
 static uint32_t next_announcement (uint32_t announcements, uint16_t period)
 {
@@ -83,10 +107,11 @@ static uint32_t next_announcement (uint32_t announcements, uint16_t period)
 	return period;
 }
 
+
 static void update_boot_time (void)
 {
-	if (m_boot_time == ((time_t)-1))
-	{ // Adjust boot time only when it is not known
+	if (m_boot_time == ((time_t)-1)) // Adjust boot time only when it is not known
+	{
 		time_t now = time(NULL);
 		if (((time_t)-1) != now)
 		{
@@ -95,55 +120,201 @@ static void update_boot_time (void)
 	}
 }
 
+
+static void allow_sleep (void)
+{
+	device_announcer_t * p_anc = mp_announcers;
+	while (NULL != p_anc)
+	{
+		if (NULL != p_anc->comms_ctrl)
+		{
+			comms_sleep_allow(p_anc->comms_ctrl);
+		}
+		p_anc = p_anc->next;
+	}
+}
+
+
+static device_announcer_t * get_pending_announcer (uint32_t * timeout_s)
+{
+	uint32_t now = osCounterGetSecond();
+	device_announcer_t * p_anc = mp_announcers;
+	while (NULL != p_anc)
+	{
+		// Limit period to "reasonable" values to not break calculations
+		if ((p_anc->period >= DEVA_MIN_PERIOD_S) && (p_anc->period <= DEVA_MAX_PERIOD_S))
+		{
+		    uint32_t next = p_anc->last + next_announcement(p_anc->announcements, p_anc->period);
+		    if (next <= now)
+		    {
+				return p_anc;
+		    }
+		    else
+		    {
+		    	uint32_t remaining = next - now;
+		    	if (remaining < *timeout_s)
+		    	{
+		    		*timeout_s = remaining;
+		    	}
+		    }
+		}
+		p_anc = p_anc->next;
+	}
+	return NULL;
+}
+
+
 static void announcement_loop (void * arg)
 {
+	comms_msg_t * p_msg = NULL;
+	uint32_t timeout_s = DEVICE_ANNOUNCEMENT_POLL_PERIOD_S;
+
 	for (;;)
 	{
-		osDelay(DEVICE_ANNOUNCEMENT_POLL_PERIOD_S*1000UL);
+		uint32_t flags = osThreadFlagsWait(ANNC_FLAGS, osFlagsWaitAny, timeout_s * 1000UL + 1);
+		device_announcer_t * p_anc = NULL;
+
+		if (osFlagsErrorTimeout == flags)
+		{
+			flags = 0;
+		}
+
+		if (ANNC_FLAG_SNT & flags)
+		{
+			comms_pool_put(mp_pool, p_msg);
+			p_msg = NULL;
+		}
+
+		if (NULL != p_msg)
+		{
+			continue;
+		}
 
 		while (osOK != osMutexAcquire(m_mutex, osWaitForever));
 
-		if (unguarded_deva_poll())
+		if (NULL == p_msg)
 		{
-			debug1("snt");
+			announcement_action_t aa;
+			if (osOK == osMessageQueueGet(m_action_queue, &aa, NULL, 0))
+			{
+				// Check that the announcer is valid (has not been removed for example)
+				p_anc = mp_announcers;
+				while (NULL != p_anc)
+				{
+					if (p_anc == aa.p_anc)
+					{
+						break;
+					}
+					p_anc = p_anc->next;
+				}
+
+				if (NULL != p_anc)
+				{
+					p_msg = handle_action(&aa);
+				}
+				else
+				{
+					err1("p %p", aa.p_anc);
+				}
+			}
+		}
+
+		if (NULL == p_msg)
+		{
+			p_anc = get_pending_announcer(&timeout_s);
+			if (NULL != p_anc)
+			{
+				debug1("annc %p", p_anc);
+				p_msg = announce(p_anc, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR);
+				if (NULL != p_msg)
+				{
+					p_anc->last = osCounterGetSecond();
+					p_anc->announcements++;
+				}
+				else
+				{
+					warn1("msg");
+				}
+				timeout_s = DEVICE_ANNOUNCEMENT_POLL_PERIOD_S;
+			}
+		}
+
+		if (NULL != p_msg)
+		{
+			if (NULL != p_anc->comms_ctrl)
+			{
+				comms_sleep_block(p_anc->comms_ctrl);
+				while (COMMS_STARTED != comms_status(p_anc->comms));
+				timeout_s = 1; // Leave comms on for 1 second
+			}
+
+			comms_error_t err = comms_send(p_anc->comms, p_msg, radio_send_done, NULL);
+			logger(COMMS_SUCCESS == err ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
+			if (COMMS_SUCCESS != err)
+			{
+				comms_pool_put(mp_pool, p_msg);
+				p_msg = NULL;
+			}
+		}
+		else if (0 == flags) // A timeout just happened and we have nothing to do
+		{
+			update_boot_time();
+			allow_sleep();
+			debug1("sleep %"PRIu32, timeout_s);
+		}
+		else
+		{
+			debug1("flgs %"PRIx32" sleep %"PRIu32, flags, timeout_s);
 		}
 
 		osMutexRelease(m_mutex);
 	}
 }
 
-bool deva_init (void)
+
+bool deva_init (comms_pool_t * p_pool)
 {
 	mp_announcers = NULL;
 	m_boot_time = ((time_t)-1);
-	m_busy = false;
-	update_boot_time();
 
-	m_mutex = osMutexNew(NULL);
+	mp_pool = p_pool;
+
+	const osMutexAttr_t annc_mutex_attr = { "annc", osMutexPrioInherit, NULL, 0U };
+	m_mutex = osMutexNew(&annc_mutex_attr);
+	if (NULL == m_mutex)
+	{
+		return false;
+	}
 
     const osThreadAttr_t annc_thread_attr = { .name = "annc", .stack_size = 1536 };
-    osThreadId_t thrd = osThreadNew(announcement_loop, NULL, &annc_thread_attr);
-    if (NULL == thrd)
+    m_thread_id = osThreadNew(announcement_loop, NULL, &annc_thread_attr);
+    if (NULL == m_thread_id)
     {
+    	osMutexDelete(m_mutex);
+    	m_mutex = NULL;
     	return false;
     }
     return true;
 }
 
-bool deva_add_announcer (device_announcer_t * p_announcer, comms_layer_t * p_comms, comms_sleep_controller_t * p_rctrl, uint32_t period_s)
+
+bool deva_add_announcer (device_announcer_t * p_anc,
+	comms_layer_t * p_comms, comms_sleep_controller_t * p_rctrl,
+	uint32_t period_s)
 {
-	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
+	p_anc->comms = p_comms;
+	p_anc->comms_ctrl = p_rctrl;
+	p_anc->period = period_s;
+	p_anc->last = osCounterGetSecond() - (rand() % next_announcement(0, p_anc->period));
+	p_anc->announcements = 0;
+	p_anc->next = NULL;
 
-	device_announcer_t** pp_anc = &mp_announcers;
-	p_announcer->comms = p_comms;
-	p_announcer->comms_ctrl = p_rctrl;
-	p_announcer->period = period_s;
-	p_announcer->busy = false;
-	p_announcer->last = osCounterGetSecond(); // TODO introduce initial random here
-	p_announcer->announcements = 0;
-	p_announcer->next = NULL;
-
-	comms_register_recv(p_comms, &(p_announcer->rcvr), radio_recv, p_announcer, AMID_DEVICE_ANNOUNCEMENT);
+	if (COMMS_SUCCESS != comms_register_recv(p_comms, &(p_anc->rcvr),
+		radio_receive, p_anc, AMID_DEVICE_ANNOUNCEMENT))
+	{
+		err1("regr");
+		return false;
+	}
 
 	if (NULL != p_rctrl)
 	{
@@ -153,291 +324,293 @@ bool deva_add_announcer (device_announcer_t * p_announcer, comms_layer_t * p_com
 		}
 	}
 
-	while (NULL != *pp_anc)
+	if ((period_s >= DEVA_MIN_PERIOD_S) && (period_s <= DEVA_MAX_PERIOD_S))
 	{
-		pp_anc = &((*pp_anc)->next);
+		debug1("annc %p nxt %d", p_anc, p_anc->last + next_announcement(0, p_anc->period) - osCounterGetSecond());
 	}
-	*pp_anc = p_announcer;
+	else
+	{
+		debug1("annc %p nvr", p_anc);
+	}
+
+
+	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
+
+	device_announcer_t** pp_announcers = &mp_announcers;
+	while (NULL != *pp_announcers)
+	{
+		pp_announcers = &((*pp_announcers)->next);
+	}
+	*pp_announcers = p_anc;
 
 	osMutexRelease(m_mutex);
+
+	osThreadFlagsSet(m_thread_id, ANNC_FLAG_NEW);
 
 	return true;
 }
 
+
 bool deva_remove_announcer (device_announcer_t * p_anc)
 {
-	// TODO implement removal
-	return false;
-}
+	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
 
-static bool announce(device_announcer_t* an, uint8_t version, am_addr_t destination)
-{
-	if ( ! m_busy)
+	device_announcer_t** pp_announcers = &mp_announcers;
+	while (NULL != *pp_announcers)
 	{
-		comms_msg_t * msg = messagepool_get();
-		if (NULL != msg)
+		if (p_anc == *pp_announcers)
 		{
-			uint8_t length = 0;
-			comms_init_message(an->comms, msg);
-			if (1 == version)
+			*pp_announcers = (*pp_announcers)->next;
+
+			osMutexRelease(m_mutex); // Removed, rest of teardown is independent
+
+			if (NULL != p_anc->comms_ctrl)
 			{
-				device_announcement_v1_t * anc = (device_announcement_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v1_t));
-				if (NULL != anc)
+				if (COMMS_SUCCESS != comms_deregister_sleep_controller(p_anc->comms, p_anc->comms_ctrl))
 				{
-					//coordinates_geo_t geo;
-
-					anc->header = DEVA_ANNOUNCEMENT;
-					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
-					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(node_lifetime_boots());
-
-					anc->boot_time = hton64(m_boot_time);
-					anc->uptime = hton32(osCounterGetSecond());
-					anc->lifetime = hton32(node_lifetime_seconds());
-					anc->announcement = hton32(an->announcements);
-
-					nx_uuid_application(&(anc->uuid));
-
-					//call GetGeo.get(&geo);
-					//anc->latitude = geo.latitude;
-					//anc->longitude = geo.longitude;
-					//anc->elevation = geo.elevation;
-					anc->latitude = hton32(0);
-					anc->longitude = hton32(0);
-					anc->elevation = hton32(0);
-
-					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
-					anc->feature_list_hash = hton32(devf_hash());
-
-					length = sizeof(device_announcement_v1_t);
-				}
-			}
-			else
-			{
-				device_announcement_v2_t * anc = (device_announcement_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v2_t));
-				if (NULL != anc)
-				{
-					//coordinates_geo_t geo;
-
-					anc->header = DEVA_ANNOUNCEMENT;
-					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
-					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(node_lifetime_boots());
-
-					anc->boot_time = hton64(m_boot_time);
-					anc->uptime = hton32(osCounterGetSecond());
-					anc->lifetime = hton32(node_lifetime_seconds());
-					anc->announcement = hton32(an->announcements);
-
-					nx_uuid_application(&(anc->uuid));
-
-					//call GetGeo.get(&geo);
-					//anc->position_type = geo.type;
-					//anc->latitude = geo.latitude;
-					//anc->longitude = geo.longitude;
-					//anc->elevation = geo.elevation;
-					anc->position_type = 'U';
-					anc->latitude = hton32(0);
-					anc->longitude = hton32(0);
-					anc->elevation = hton32(0);
-
-					anc->radio_tech = 1; // Always 802.15.4 ... for now
-					anc->radio_channel = radio_channel(); // call RadioChannel.getChannel();
-
-					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
-					anc->feature_list_hash = hton32(devf_hash());
-
-					length = sizeof(device_announcement_v2_t);
+					sys_panic("drc");
 				}
 			}
 
-			if (length > 0)
+			if (COMMS_SUCCESS != comms_deregister_recv(p_anc->comms, &(p_anc->rcvr)))
 			{
-				comms_error_t err;
-				comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
-				comms_am_set_destination(an->comms, msg, destination);
-				comms_set_payload_length(an->comms, msg, length);
-
-				if (NULL != an->comms_ctrl)
-				{
-					comms_sleep_block(an->comms_ctrl);
-					while (COMMS_STARTED != comms_status(an->comms));
-				}
-
-				err = comms_send(an->comms, msg, radio_send_done, an);
-
-				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
-				if (err == COMMS_SUCCESS)
-				{
-					m_busy = true;
-					return true;
-				}
+				sys_panic("drr");
 			}
-			messagepool_put(msg);
+
+			return true;
 		}
+		pp_announcers = &((*pp_announcers)->next);
 	}
-	else warn1("bsy");
 
+	osMutexRelease(m_mutex);
 	return false;
 }
 
-static bool describe(device_announcer_t* an, uint8_t version, am_addr_t destination)
+
+static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr_t destination)
 {
-	if ( ! m_busy)
+	comms_msg_t * msg = comms_pool_get(mp_pool, 0);
+	if (NULL != msg)
 	{
-		comms_msg_t* msg = messagepool_get();
-		if (NULL != msg)
+		uint8_t length = 0;
+		comms_init_message(an->comms, msg);
+		if (1 == version)
 		{
-			uint8_t length = 0;
-			comms_init_message(an->comms, msg);
-			if (version == 1)
+			device_announcement_v1_t * anc = (device_announcement_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v1_t));
+			if (NULL != anc)
 			{
-				device_description_v1_t* anc = (device_description_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v1_t));
-				if (NULL != anc)
-				{
-					anc->header = DEVA_DESCRIPTION;
-					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
-					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(node_lifetime_boots());
+				coordinates_geo_t geo;
 
-					sigGetPlatformUUID((uint8_t*)&(anc->platform));
-
-					sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
-					anc->production = hton64(sigGetPlatformProductionTime());
-
-					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
-					anc->sw_major_version = SW_MAJOR_VERSION;
-					anc->sw_minor_version = SW_MINOR_VERSION;
-					anc->sw_patch_version = SW_PATCH_VERSION;
-
-					length = sizeof(device_description_v1_t);
-				}
-			}
-			else
-			{
-				device_description_v2_t* anc = (device_description_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v2_t));
-				if (NULL != anc)
-				{
-					semver_t hwv = sigGetPlatformVersion();
-
-					anc->header = DEVA_DESCRIPTION;
-					anc->version = DEVICE_ANNOUNCEMENT_VERSION;
-					sigGetEui64((uint8_t*)anc->guid);
-					anc->boot_number = hton32(node_lifetime_boots());
-
-					sigGetPlatformUUID((uint8_t*)&(anc->platform));
-
-					anc->hw_major_version = hwv.major;
-					anc->hw_minor_version = hwv.minor;
-					anc->hw_assem_version = hwv.patch;
-
-					sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
-					anc->production = hton64(sigGetPlatformProductionTime());
-
-					anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
-					anc->sw_major_version = SW_MAJOR_VERSION;
-					anc->sw_minor_version = SW_MINOR_VERSION;
-					anc->sw_patch_version = SW_PATCH_VERSION;
-
-					length = sizeof(device_description_v2_t);
-				}
-			}
-
-			if (length > 0)
-			{
-				comms_error_t err;
-				comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
-				comms_am_set_destination(an->comms, msg, destination);
-				comms_set_payload_length(an->comms, msg, length);
-
-				if (NULL != an->comms_ctrl)
-				{
-					comms_sleep_block(an->comms_ctrl);
-					while (COMMS_STARTED != comms_status(an->comms));
-				}
-
-				err = comms_send(an->comms, msg, radio_send_done, an);
-
-				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
-				if (err == COMMS_SUCCESS)
-				{
-					m_busy = true;
-					return true;
-				}
-			}
-			messagepool_put(msg);
-		}
-	}
-	else warn1("bsy");
-
-	return false;
-}
-
-static bool list_features(device_announcer_t* an, am_addr_t destination, uint8_t offset)
-{
-	if ( ! m_busy)
-	{
-		comms_msg_t* msg = messagepool_get();
-		if (NULL != msg)
-		{
-			uint8_t space = (comms_get_payload_max_length(an->comms) - sizeof(device_features_t)) / sizeof(uuid_t);
-			device_features_t* anc = (device_features_t*)comms_get_payload(an->comms, msg, sizeof(device_features_t) + space*sizeof(uuid_t));
-			comms_init_message(an->comms, msg);
-			if (NULL != anc) {
-				uint8_t total_features = devf_count();
-				comms_error_t err;
-				uint8_t ftrs = 0;
-				uint8_t skip = 0;
-
-				anc->header = DEVA_FEATURES;
+				anc->header = DEVA_ANNOUNCEMENT;
 				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
 				sigGetEui64((uint8_t*)anc->guid);
 				anc->boot_number = hton32(node_lifetime_boots());
 
-				anc->total = total_features;
-				anc->offset = offset;
+				anc->boot_time = hton64(m_boot_time);
+				anc->uptime = hton32(osCounterGetSecond());
+				anc->lifetime = hton32(node_lifetime_seconds());
+				anc->announcement = hton32(an->announcements);
 
-				for (;(ftrs<space)&&(offset+skip+ftrs<total_features);)
+				nx_uuid_application(&(anc->uuid));
+
+				if (node_coordinates_get(&geo))
 				{
-					if (devf_get_feature(offset+ftrs, &(anc->features[ftrs])))
-					{
-						ftrs++;
-					}
-					else
-					{ // Feature disabled ... or problematic?
-						skip++;
-					}
+					anc->latitude = hton32(geo.latitude);
+					anc->longitude = hton32(geo.longitude);
+					anc->elevation = hton32(geo.elevation);
+				}
+				else
+				{
+					anc->latitude = 0;
+					anc->longitude = 0;
+					anc->elevation = 0;
 				}
 
-				debugb1("ftrs %u total %u", anc, sizeof(device_features_t)+ftrs*sizeof(nx_uuid_t), ftrs, anc->total);
+				anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+				anc->feature_list_hash = hton32(devf_hash());
 
-				comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
-				comms_am_set_destination(an->comms, msg, destination);
-				comms_set_payload_length(an->comms, msg, sizeof(device_features_t) + ftrs*sizeof(uuid_t));
+				length = sizeof(device_announcement_v1_t);
+			}
+		}
+		else
+		{
+			device_announcement_v2_t * anc = (device_announcement_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v2_t));
+			if (NULL != anc)
+			{
+				coordinates_geo_t geo;
 
-				if (NULL != an->comms_ctrl)
+				anc->header = DEVA_ANNOUNCEMENT;
+				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+				sigGetEui64((uint8_t*)anc->guid);
+				anc->boot_number = hton32(node_lifetime_boots());
+
+				anc->boot_time = hton64(m_boot_time);
+				anc->uptime = hton32(osCounterGetSecond());
+				anc->lifetime = hton32(node_lifetime_seconds());
+				anc->announcement = hton32(an->announcements);
+
+				nx_uuid_application(&(anc->uuid));
+				if (node_coordinates_get(&geo))
 				{
-					comms_sleep_block(an->comms_ctrl);
-					while (COMMS_STARTED != comms_status(an->comms));
+					anc->position_type = geo.type;
+					anc->latitude = hton32(geo.latitude);
+					anc->longitude = hton32(geo.longitude);
+					anc->elevation = hton32(geo.elevation);
+				}
+				else
+				{
+					anc->position_type = 'U';
+					anc->latitude = 0;
+					anc->longitude = 0;
+					anc->elevation = 0;
 				}
 
-				err = comms_send(an->comms, msg, radio_send_done, an);
+				anc->radio_tech = 1; // Always 802.15.4 ... for now
+				anc->radio_channel = radio_channel(); // FIXME
 
-				logger(err == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
-				if (err == COMMS_SUCCESS)
+				anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+				anc->feature_list_hash = hton32(devf_hash());
+
+				length = sizeof(device_announcement_v2_t);
+			}
+		}
+
+		if (length > 0)
+		{
+			comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
+			comms_am_set_destination(an->comms, msg, destination);
+			comms_set_payload_length(an->comms, msg, length);
+			return msg;
+		}
+		comms_pool_put(mp_pool, msg);
+	}
+
+	return NULL;
+}
+
+static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t destination)
+{
+	comms_msg_t* msg = comms_pool_get(mp_pool, 0);
+	if (NULL != msg)
+	{
+		uint8_t length = 0;
+		comms_init_message(an->comms, msg);
+		if (version == 1)
+		{
+			device_description_v1_t* anc = (device_description_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v1_t));
+			if (NULL != anc)
+			{
+				anc->header = DEVA_DESCRIPTION;
+				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+				sigGetEui64((uint8_t*)anc->guid);
+				anc->boot_number = hton32(node_lifetime_boots());
+
+				sigGetPlatformUUID((uint8_t*)&(anc->platform));
+
+				sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
+				anc->production = hton64(sigGetPlatformProductionTime());
+
+				anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+				anc->sw_major_version = SW_MAJOR_VERSION;
+				anc->sw_minor_version = SW_MINOR_VERSION;
+				anc->sw_patch_version = SW_PATCH_VERSION;
+
+				length = sizeof(device_description_v1_t);
+			}
+		}
+		else
+		{
+			device_description_v2_t* anc = (device_description_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v2_t));
+			if (NULL != anc)
+			{
+				semver_t hwv = sigGetPlatformVersion();
+
+				anc->header = DEVA_DESCRIPTION;
+				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+				sigGetEui64((uint8_t*)anc->guid);
+				anc->boot_number = hton32(node_lifetime_boots());
+
+				sigGetPlatformUUID((uint8_t*)&(anc->platform));
+
+				anc->hw_major_version = hwv.major;
+				anc->hw_minor_version = hwv.minor;
+				anc->hw_assem_version = hwv.patch;
+
+				sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
+				anc->production = hton64(sigGetPlatformProductionTime());
+
+				anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+				anc->sw_major_version = SW_MAJOR_VERSION;
+				anc->sw_minor_version = SW_MINOR_VERSION;
+				anc->sw_patch_version = SW_PATCH_VERSION;
+
+				length = sizeof(device_description_v2_t);
+			}
+		}
+
+		if (length > 0)
+		{
+			comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
+			comms_am_set_destination(an->comms, msg, destination);
+			comms_set_payload_length(an->comms, msg, length);
+			return msg;
+		}
+
+		comms_pool_put(mp_pool, msg);
+	}
+
+	return NULL;
+}
+
+static comms_msg_t * list_features(device_announcer_t* an, am_addr_t destination, uint8_t offset)
+{
+	comms_msg_t* msg = comms_pool_get(mp_pool, 0);
+	if (NULL != msg)
+	{
+		uint8_t space = (comms_get_payload_max_length(an->comms) - sizeof(device_features_t)) / sizeof(uuid_t);
+		device_features_t* anc = (device_features_t*)comms_get_payload(an->comms, msg, sizeof(device_features_t) + space*sizeof(uuid_t));
+		comms_init_message(an->comms, msg);
+		if (NULL != anc)
+		{
+			uint8_t total_features = devf_count();
+			uint8_t ftrs = 0;
+			uint8_t skip = 0;
+
+			anc->header = DEVA_FEATURES;
+			anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+			sigGetEui64((uint8_t*)anc->guid);
+			anc->boot_number = hton32(node_lifetime_boots());
+
+			anc->total = total_features;
+			anc->offset = offset;
+
+			for (;(ftrs<space)&&(offset+skip+ftrs<total_features);)
+			{
+				if (devf_get_feature(offset+ftrs, &(anc->features[ftrs])))
 				{
-					m_busy = true;
-					return true;
+					ftrs++;
+				}
+				else // Feature disabled ... or problematic?
+				{
+					skip++;
 				}
 			}
-			else warn1("pl");
-			messagepool_put(msg);
-		}
-		else warn1("pool");
-	}
-	else warn1("bsy");
 
-	return false;
+			debugb1("ftrs %u total %u", anc, sizeof(device_features_t)+ftrs*sizeof(nx_uuid_t), ftrs, anc->total);
+
+			comms_set_packet_type(an->comms, msg, AMID_DEVICE_ANNOUNCEMENT);
+			comms_am_set_destination(an->comms, msg, destination);
+			comms_set_payload_length(an->comms, msg, sizeof(device_features_t) + ftrs*sizeof(uuid_t));
+
+			return msg;
+		}
+		else warn1("pl");
+
+		comms_pool_put(mp_pool, msg);
+	}
+	else warn1("pool");
+
+	return NULL;
 }
 
 
@@ -446,154 +619,177 @@ static void radio_status_changed (comms_layer_t * comms, comms_status_t status, 
     // Actual status change is checked by polling, but the callback is mandatory
 }
 
+
 static void radio_send_done (comms_layer_t * comms, comms_msg_t * msg, comms_error_t result, void * user)
 {
 	logger(result == COMMS_SUCCESS ? LOG_DEBUG1: LOG_WARN1, "snt(%d)", (int)result);
-
-	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
-
-	device_announcer_t * an = (device_announcer_t*)user;
-	if (NULL != an->comms_ctrl)
-	{
-		comms_sleep_allow(an->comms_ctrl);
-	}
-
-	messagepool_put(msg);
-	m_busy = false;
-
-	osMutexRelease(m_mutex);
+	osThreadFlagsSet(m_thread_id, ANNC_FLAG_SNT);
 }
 
-static void radio_recv (comms_layer_t * comms, const comms_msg_t * msg, void * user)
+
+/**
+ * Parse incoming messaages. When the message contains a request, pass on only
+ * the request through the request fields of announcement_action_t. If it contains
+ * info about another node, copy the entire message and pass that to the
+ * announcement thread.
+ **/
+static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void * user)
 {
 	uint8_t len = comms_get_payload_length(comms, msg);
 	uint8_t * payload = comms_get_payload(comms, msg, len);
-	debugb1("rcv[%p]", payload, len, user);
+	am_addr_t source = comms_am_get_source(comms, msg);
 
-	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
-
-	device_announcer_t * an = (device_announcer_t*)user;
+	debugb1("c %p rcv %04"PRIX16, payload, len, comms, source);
 	if (len >= 2)
 	{
-		uint8_t version = ((uint8_t*)payload)[1];
-		if (version > DEVICE_ANNOUNCEMENT_VERSION)
-		{
-			version = DEVICE_ANNOUNCEMENT_VERSION;
-		}
-		switch (((uint8_t*)payload)[0])
+		announcement_action_t aa;
+		aa.p_anc = (device_announcer_t*)user;
+		aa.action = ((uint8_t*)payload)[0];
+
+		switch (aa.action)
 		{
 			case DEVA_ANNOUNCEMENT:
-				if (version == DEVICE_ANNOUNCEMENT_VERSION)
-				{ // version 2
-					if (len >= sizeof(device_announcement_v2_t))
+			case DEVA_DESCRIPTION:
+			case DEVA_FEATURES:
+				aa.info.p_msg = comms_pool_get(mp_pool, 0);
+				if (NULL != aa.info.p_msg)
+				{
+					memcpy(aa.info.p_msg, msg, sizeof(comms_msg_t));
+					if (osOK != osMessageQueuePut(m_action_queue, &aa, 0, 0))
 					{
-						device_announcement_v2_t* da = (device_announcement_v2_t*)payload;
-						infob1("anc %"PRIu32":%"PRIu32, da->guid, 8,
-							(uint32_t)(da->boot_number), (uint32_t)(da->uptime));
-						(void)da;
-						//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), da); // TODO a proper event?
+						warn1("qb"); // Queue has overflowed
+						comms_pool_put(mp_pool, aa.info.p_msg);
 					}
-				}
-				else if (version == 1)
-				{ // version 1 - upgrade to current version structure
-					if (len >= sizeof(device_announcement_v1_t))
-					{
-						device_announcement_v1_t* da1 = (device_announcement_v1_t*)payload;
-						device_announcement_v2_t da;
-
-						da.header = da1->header;
-						da.version = DEVICE_ANNOUNCEMENT_VERSION;
-						memcpy(da.guid, da1->guid, 8);
-						da.boot_number = da1->boot_number;
-
-						da.boot_time = da1->boot_time;
-						da.uptime = da1->uptime;
-						da.lifetime = da1->lifetime;
-						da.announcement = da1->announcement;
-
-						da.uuid = da1->uuid;
-
-						da.position_type = 'U'; // position type in V1 is not specified ... could be anything
-						da.latitude = da1->latitude;
-						da.longitude = da1->longitude;
-						da.elevation = da1->elevation;
-
-						da.radio_tech = 0; // 0:unknown(channel info invalid)
-						da.radio_channel = 0;
-
-						da.ident_timestamp = da1->ident_timestamp;
-
-						da.feature_list_hash = da1->feature_list_hash;
-
-						infob1("anc %"PRIu32":%"PRIu32, da.guid, 8,
-							(uint32_t)(da.boot_number), (uint32_t)(da.uptime));
-						//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), &da); // TODO a proper event?
-					}
+					break;
 				}
 				else
 				{
-					warn1("%04X ver %u", comms_am_get_source(comms, msg),
-						((uint8_t*)payload)[1]); // Unknown version ... what to do?
+					warn1("mb"); // No messages available for copy
 				}
 			break;
 
-			case DEVA_QUERY:
-			{
-				info1("qry[%p] v%d %04X", comms, version, comms_am_get_source(comms, msg));
-				announce(an, version, comms_am_get_source(comms, msg));
-			}
-			break;
-
-			case DEVA_DESCRIBE:
-				info1("dsc[%p] %04X", comms, comms_am_get_source(comms, msg));
-				describe(an, version, comms_am_get_source(comms, msg));
-			break;
-
+			// All 3 requests handled similarly, but features has an extra argument
 			case DEVA_LIST_FEATURES:
 				if (len >= 3)
 				{
-					info1("lst[%p] %04X", comms, comms_am_get_source(comms, msg));
-					list_features(an, comms_am_get_source(comms, msg), ((uint8_t*)payload)[2]);
+					aa.info.request.offset = ((uint8_t*)payload)[2];
+				}
+				else
+				{
+					break;
+				}
+			case DEVA_DESCRIBE:
+			case DEVA_QUERY:
+				aa.info.request.address = source;
+				aa.info.request.version = ((uint8_t*)payload)[1];
+
+				if (osOK != osMessageQueuePut(m_action_queue, &aa, 0, 0))
+				{
+					warn1("qb"); // Queue has overflowed
 				}
 			break;
 
 			default:
-				warnb1("dflt", payload, len);
-				break;
+				warnb1("dflt %d", payload, len, (int)aa.action);
+			break;
 		}
 	}
-
-	osMutexRelease(m_mutex);
+	else
+	{
+		err1("len %d", (int)len);
+	}
 }
 
-static bool unguarded_deva_poll (void)
+
+static uint8_t adjust_version (uint8_t version)
 {
-	uint32_t now = osCounterGetSecond();
-	device_announcer_t * an = mp_announcers;
-
-	debug1("poll %"PRIu32, now);
-
-	if (m_busy)
+	if (version > DEVICE_ANNOUNCEMENT_VERSION) // Downgrade version for most cases
 	{
-		warn1("busy");
-		return false;
+		return DEVICE_ANNOUNCEMENT_VERSION;
 	}
+	return version;
+}
 
-	while (NULL != an)
+
+static comms_msg_t * handle_action (const announcement_action_t * aa)
+{
+	switch (aa->action)
 	{
-		// Limit period to "reasonable" values to not break calculations
-		if (((an->period > 0)&&(an->period < 365*24*3600))
-		 &&(an->last + next_announcement(an->announcements, an->period) <= now))
+		case DEVA_ANNOUNCEMENT:
 		{
-			if (announce(an, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR))
-			{
-				an->last = now;
-				an->announcements++;
+			uint8_t len = comms_get_payload_length(aa->p_anc->comms, aa->info.p_msg);
+			uint8_t * payload = comms_get_payload(aa->p_anc->comms, aa->info.p_msg, len);
+			am_addr_t source = comms_am_get_source(aa->p_anc->comms, aa->info.p_msg);
+			uint8_t version = ((uint8_t*)payload)[1];
+
+			if (version == DEVICE_ANNOUNCEMENT_VERSION)
+			{ // version 2
+				if (len >= sizeof(device_announcement_v2_t))
+				{
+					device_announcement_v2_t* da = (device_announcement_v2_t*)payload;
+					infob1("anc %"PRIu32":%"PRIu32, da->guid, 8,
+						(uint32_t)(da->boot_number), (uint32_t)(da->uptime));
+					(void)da;
+					//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), da); // TODO a proper event?
+				}
 			}
-			return true;
+			else if (version == 1)
+			{ // version 1 - upgrade to current version structure (2 currently)
+				if (len >= sizeof(device_announcement_v1_t))
+				{
+					device_announcement_v1_t* da1 = (device_announcement_v1_t*)payload;
+					device_announcement_v2_t da;
+
+					da.header = da1->header;
+					da.version = DEVICE_ANNOUNCEMENT_VERSION;
+					memcpy(da.guid, da1->guid, 8);
+					da.boot_number = da1->boot_number;
+
+					da.boot_time = da1->boot_time;
+					da.uptime = da1->uptime;
+					da.lifetime = da1->lifetime;
+					da.announcement = da1->announcement;
+
+					da.uuid = da1->uuid;
+
+					da.position_type = 'U'; // position type in V1 is not specified ... could be anything
+					da.latitude = da1->latitude;
+					da.longitude = da1->longitude;
+					da.elevation = da1->elevation;
+
+					da.radio_tech = 0; // 0:unknown(channel info invalid)
+					da.radio_channel = 0;
+
+					da.ident_timestamp = da1->ident_timestamp;
+
+					da.feature_list_hash = da1->feature_list_hash;
+
+					infob1("anc %"PRIu32":%"PRIu32, da.guid, 8,
+						(uint32_t)(da.boot_number), (uint32_t)(da.uptime));
+					//signal DeviceAnnouncement.received(call AMPacket.source[iface](msg), &da); // TODO a proper event?
+				}
+			}
+			else
+			{
+				warn1("%04"PRIX16" ver %u", source, (unsigned int)((uint8_t*)payload)[1]); // Unknown version ... what to do?
+			}
 		}
-		an = an->next;
+		break;
+
+		case DEVA_QUERY:
+			info1("qry v%d %04"PRIX16, (int)adjust_version(aa->info.request.version), aa->info.request.address);
+			return announce(aa->p_anc, adjust_version(aa->info.request.version), aa->info.request.address);
+		case DEVA_DESCRIBE:
+			info1("dsc %04"PRIX16, aa->info.request.address);
+			return describe(aa->p_anc, adjust_version(aa->info.request.version), aa->info.request.address);
+		case DEVA_LIST_FEATURES:
+			info1("lst %04"PRIX16, aa->info.request.address);
+			return list_features(aa->p_anc, aa->info.request.address, aa->info.request.offset);
+
+		default:
+			warn1("dflt %d", (int)aa->action);
+		break;
 	}
 
-	return false;
+	return NULL;
 }
