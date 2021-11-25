@@ -286,10 +286,20 @@ bool deva_init (comms_pool_t * p_pool)
 		return false;
 	}
 
+	m_action_queue = osMessageQueueNew(1, sizeof(announcement_action_t), NULL);
+	if (NULL == m_action_queue)
+	{
+    	osMutexDelete(m_mutex);
+    	m_mutex = NULL;
+		return false;
+	}
+
     const osThreadAttr_t annc_thread_attr = { .name = "annc", .stack_size = 1536 };
     m_thread_id = osThreadNew(announcement_loop, NULL, &annc_thread_attr);
     if (NULL == m_thread_id)
     {
+    	osMessageQueueDelete(m_action_queue);
+    	m_action_queue = NULL;
     	osMutexDelete(m_mutex);
     	m_mutex = NULL;
     	return false;
