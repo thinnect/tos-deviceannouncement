@@ -211,6 +211,10 @@ static void announcement_loop (void * arg)
 				if (NULL != p_anc)
 				{
 					p_msg = handle_action(&aa);
+					if (NULL != aa.info.p_msg)
+					{
+						comms_pool_put(mp_pool, aa.info.p_msg); // Release the message
+					}
 				}
 				else
 				{
@@ -494,13 +498,14 @@ static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr
 		}
 		comms_pool_put(mp_pool, msg);
 	}
+	else warn1("pool");
 
 	return NULL;
 }
 
 static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t destination)
 {
-	comms_msg_t* msg = comms_pool_get(mp_pool, 0);
+	comms_msg_t * msg = comms_pool_get(mp_pool, 0);
 	if (NULL != msg)
 	{
 		uint8_t length = 0;
@@ -568,18 +573,21 @@ static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t
 
 		comms_pool_put(mp_pool, msg);
 	}
+	else warn1("pool");
 
 	return NULL;
 }
 
 static comms_msg_t * list_features(device_announcer_t* an, am_addr_t destination, uint8_t offset)
 {
-	comms_msg_t* msg = comms_pool_get(mp_pool, 0);
+	comms_msg_t * msg = comms_pool_get(mp_pool, 0);
 	if (NULL != msg)
 	{
 		uint8_t space = (comms_get_payload_max_length(an->comms) - sizeof(device_features_t)) / sizeof(uuid_t);
-		device_features_t* anc = (device_features_t*)comms_get_payload(an->comms, msg, sizeof(device_features_t) + space*sizeof(uuid_t));
+
 		comms_init_message(an->comms, msg);
+
+		device_features_t * anc = (device_features_t*)comms_get_payload(an->comms, msg, sizeof(device_features_t) + space*sizeof(uuid_t));
 		if (NULL != anc)
 		{
 			uint8_t total_features = devf_count();
@@ -655,6 +663,7 @@ static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void 
 		announcement_action_t aa;
 		aa.p_anc = (device_announcer_t*)user;
 		aa.action = ((uint8_t*)payload)[0];
+		aa.info.p_msg = NULL;
 
 		switch (aa.action)
 		{
@@ -670,7 +679,6 @@ static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void 
 						warn1("qb"); // Queue has overflowed
 						comms_pool_put(mp_pool, aa.info.p_msg);
 					}
-					break;
 				}
 				else
 				{
@@ -684,10 +692,8 @@ static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void 
 				{
 					aa.info.request.offset = ((uint8_t*)payload)[2];
 				}
-				else
-				{
-					break;
-				}
+			break;
+
 			case DEVA_DESCRIBE:
 			case DEVA_QUERY:
 				aa.info.request.address = source;
