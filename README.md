@@ -19,18 +19,14 @@ management API and implementation.
 **This implementation currently does not support local listeners.**
 
 The module needs intialization at boot, initialization should be performed
-after DeviceSignature has been initialized.
+after DeviceSignature has been initialized and a message pool is available.
 ```
 devf_init();
-deva_init();
+deva_init(&comms_pool);
 ```
 It is then possible to register features and add announcers. Multiple announcers
-can be added for cases wgere the device has several communication interfaces.
-The module needs to be periodically polled for spontaneous announcements to work.
-```
-deva_poll();
-```
-Request-response works on top of mist-comm callbacks.
+can be added for cases where the device has several communication interfaces.
+
 
 ## TinyOS implementation
 
