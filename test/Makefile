@@ -1,19 +1,17 @@
+# Makefile for building device-announcement test-scenarios
 
 CFLAGS += -std=c99 -g
 CFLAGS += -I.
 CFLAGS += -I../include
 CFLAGS += -I../tos/deviceannouncement
 
-# cmsis_os2_ext.h
-CFLAGS += -I/home/raido/workspace/beatbase-freertos-silabs-new/zoo/thinnect.cmsis-ext
-
-# cmsis_os2.h
-CFLAGS += -I/home/raido/workspace/beatbase-freertos-silabs-new/zoo/silabs.sdk/v2.7/platform/CMSIS/RTOS2/Include
-
 CFLAGS += -DUUID_APPLICATION_BYTES='"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"'
 
 CFLAGS += -Izoo/thinnect.node-platform/mocks
 CFLAGS += -Izoo/thinnect.node-platform/include
+
+CFLAGS += -Izoo/thinnect.cmsis-ext
+CFLAGS += -Izoo/thinnect.cmsis-freertos/CMSIS_5/CMSIS/RTOS2/Include
 
 CFLAGS += -Izoo/thinnect.mist-comm/include
 CFLAGS += -Izoo/thinnect.mist-comm/include/compat
@@ -49,7 +47,9 @@ SRCS += mist_comm_controller.c mist_comm_addrcache.c mist_comm_am_addrdisco.c
 # mist-comm mocks
 SRCS += mist_comm_mutex.c mist_comm_defer.c mist_comm_pool.c
 SRCS += DeviceSignature.c SignatureArea.c
+
 SRCS += loggers_std.c
+
 SRCS += crcccitt.c
 
 SRCS += cmsis_os2_mock.c

@@ -22,3 +22,11 @@
 	path = test/zoo/lammertb.libcrc
 	url = https://github.com/lammertb/libcrc.git
 	branch = master
+[submodule "test/zoo/thinnect.cmsis-ext"]
+	path = test/zoo/thinnect.cmsis-ext
+	url = https://github.com/thinnect/cmsis-ext.git
+	branch = dev
+[submodule "test/zoo/thinnect.cmsis-freertos"]
+	path = test/zoo/thinnect.cmsis-freertos
+	url = https://github.com/thinnect/cmsis-freertos
+	branch = freertos-source-change
