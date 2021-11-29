@@ -20,5 +20,5 @@
 	branch = master
 [submodule "test/zoo/lammertb.libcrc"]
 	path = test/zoo/lammertb.libcrc
-	url = git@github.com:lammertb/libcrc.git
+	url = https://github.com/lammertb/libcrc.git
 	branch = master
