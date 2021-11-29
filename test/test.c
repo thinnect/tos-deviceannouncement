@@ -12,42 +12,65 @@
 #define __LOG_LEVEL__ ( LOG_LEVEL_test & BASE_LOG_LEVEL )
 #include "log.h"
 
+#include "device_announcement_test.h"
+
 #include "DeviceSignature.h"
 #include "SignatureAreaFile.h"
 #include "mist_comm.h"
 #include "mist_comm_am.h"
 #include "device_announcement.h"
 #include "device_features.h"
+#include "node_coordinates.h"
 
-#include "time64.h"
+#include <time.h>
 #include "nesc_to_c_compat.h"
 
 uint32_t test_errors = 0;
 uint8_t packets_sent = 0;
 
-// Mocking time functions
 uint32_t fake_localtime = 0;
 
-uint32_t localtime_sec() {
-	return fake_localtime;
+uint32_t node_lifetime_seconds (void)
+{
+	return fake_localtime + 100;
 }
-uint32_t lifetime_sec() {
-	return localtime_sec() + 100;
-}
-uint32_t lifetime_boots() {
+
+uint32_t node_lifetime_boots (void)
+{
 	return 1;
 }
-time64_t realtimeclock() {
-	return localtime_sec() + 1000000;
-}
-uint8_t radio_channel() {
+
+uint8_t radio_channel()
+{
 	return 0;
 }
-void nx_uuid_application(nx_uuid_t* uuid) {
-	memset(uuid, 0, 16);
+
+time_t time (time_t * t)
+{
+	time_t tt = fake_localtime + 1000000;
+	if (NULL != t)
+	{
+		* t = tt;
+	}
+	return tt;
+}
+
+bool node_coordinates_get(coordinates_geo_t * geo)
+{
+	geo->latitude = 0;
+	geo->longitude = 0;
+	geo->elevation = 0;
+	geo->type = 'U';
+	return false;
 }
 
 // Mocking radio
+
+uint8_t fake_comms_len(comms_layer_iface_t * comms)
+{
+	return 100;
+}
+
 comms_msg_t mmsg1;
 comms_msg_t* mcopy1 = &mmsg1;
 comms_msg_t* _msg1 = NULL;
@@ -61,7 +84,6 @@ comms_error_t fake_comms_send1(comms_layer_iface_t* comms, comms_msg_t* msg, com
 	uint8_t* payload = (uint8_t*)comms_get_payload(c, msg, length);
 	debugb1("send1", payload, length);
 	packets_sent++;
-
 	if(fake_localtime == 1) {
 		uint8_t ref[] =
 		"\x00\x02" // hdr-version
@@ -128,20 +150,22 @@ int testPeriodicAnnouncements() {
 	test_errors = 0;
 	//-----------
 
+	printf("------------------------------------------------------------------------\n");
+
 	uint8_t r1[512];
 	comms_layer_t* radio = (comms_layer_t*)r1;
-	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send1, NULL, NULL);
+	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send1, &fake_comms_len, NULL, NULL);
 	printf("create radio=%d\n", err);
 
 	sigAreaInit("fakesignature.bin");
 	sigInit();
 
 	device_announcer_t announcer;
-	deva_init();
+	deva_init(NULL);
 	deva_add_announcer(&announcer, radio, NULL, 10);
 
 	for(uint8_t i=0;i<60;i++) {
-		deva_poll();
+		unittest_process_announcements (osThreadFlagsWait(0x7FFFFFFF, 0, 0), 0);
 		fake_localtime++;
 		if(_sdf1 != NULL) {
 			_sdf1(radio, _msg1, COMMS_SUCCESS, _user1);
@@ -202,20 +226,22 @@ int testDescriptionResponse() {
 	test_errors = 0;
 	//-----------
 
+	printf("------------------------------------------------------------------------\n");
+
 	uint8_t r1[512];
 	comms_layer_t* radio = (comms_layer_t*)r1;
-	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send2, NULL, NULL);
+	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send2, &fake_comms_len, NULL, NULL);
 	printf("create radio=%d\n", err);
 
 	sigAreaInit("fakesignature.bin");
 	sigInit();
 
 	device_announcer_t announcer;
-	deva_init();
+	deva_init(NULL);
 	deva_add_announcer(&announcer, radio, NULL, 0);
 
 	for(uint8_t i=0;i<60;i++) {
-		deva_poll();
+		unittest_process_announcements (osThreadFlagsWait(0x7FFFFFFF, 0, 0), 0);
 		fake_localtime++;
 		if(_sdf1 != NULL) {
 			_sdf1(radio, _msg1, COMMS_SUCCESS, _user1);
@@ -327,9 +353,11 @@ int testListFeaturesResponse() {
 	test_errors = 0;
 	//-----------
 
+	printf("------------------------------------------------------------------------\n");
+
 	uint8_t r1[512];
 	comms_layer_t* radio = (comms_layer_t*)r1;
-	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send3, NULL, NULL);
+	comms_error_t err = comms_am_create(radio, 1, &fake_comms_send3, &fake_comms_len, NULL, NULL);
 	printf("create radio=%d\n", err);
 
 	sigAreaInit("fakesignature.bin");
@@ -342,11 +370,11 @@ int testListFeaturesResponse() {
 	devf_add_feature(&dftrs[2], (nx_uuid_t*)"\x33\x34\x35\x36\x37\x38\x39\x40\x41\x42\x43\x44\x45\x46\x47\x48");
 
 	device_announcer_t announcer;
-	deva_init();
+	deva_init(NULL);
 	deva_add_announcer(&announcer, radio, NULL, 0);
 
 	for(uint8_t i=0;i<30;i++) {
-		deva_poll();
+		unittest_process_announcements (osThreadFlagsWait(0x7FFFFFFF, 0, 0), 0);
 		fake_localtime++;
 		if(_sdf1 != NULL) {
 			_sdf1(radio, _msg1, COMMS_SUCCESS, _user1);

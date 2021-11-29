@@ -43,17 +43,14 @@ typedef struct announcement_action {
 
 	enum DeviceAnnouncementHeaderEnum action;
 
-	union { // Based on the action
-		// For incoming messages with context that might need to be forwarded
-		comms_msg_t * p_msg;
+	comms_msg_t * p_msg; // For incoming messages with context that might need to be forwarded
 
-		// For requests about this device
-		struct {
-			am_addr_t address;
-			uint8_t version;
-			uint8_t offset;
-		} request;
-	} info;
+	// For requests about this device
+	struct {
+		am_addr_t address;
+		uint8_t version;
+		uint8_t offset;
+	} request;
 } announcement_action_t;
 
 
@@ -86,6 +83,7 @@ static osThreadId_t m_thread_id;
 static osMessageQueueId_t m_action_queue;
 
 static comms_pool_t * mp_pool;
+static comms_msg_t * mp_msg;
 
 
 static void nx_uuid_application (nx_uuid_t * uuid)
@@ -96,15 +94,20 @@ static void nx_uuid_application (nx_uuid_t * uuid)
 
 static uint32_t next_announcement (uint32_t announcements, uint16_t period)
 {
+	uint32_t next = period;
 	if (announcements == 0)
 	{
-		return period / 10;
+		next = period / 10;
 	}
 	else if (announcements < 5)
 	{
-		return period / 5;
+		next = period / 5;
 	}
-	return period;
+	if (0 == next)
+	{
+		return 1;
+	}
+	return next;
 }
 
 
@@ -164,114 +167,124 @@ static device_announcer_t * get_pending_announcer (uint32_t * timeout_s)
 }
 
 
+static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_s)
+{
+	uint32_t timeout_s = current_timeout_s;
+	device_announcer_t * p_anc = NULL;
+
+	update_boot_time();
+
+	if (ANNC_FLAG_SNT & flags)
+	{
+		comms_pool_put(mp_pool, mp_msg);
+		mp_msg = NULL;
+	}
+
+	if (NULL != mp_msg)
+	{
+		return timeout_s;
+	}
+
+	while (osOK != osMutexAcquire(m_mutex, osWaitForever));
+
+	if (NULL == mp_msg)
+	{
+		announcement_action_t aa;
+		if (osOK == osMessageQueueGet(m_action_queue, &aa, NULL, 0))
+		{
+			// Check that the announcer is valid (has not been removed for example)
+			p_anc = mp_announcers;
+			while (NULL != p_anc)
+			{
+				if (p_anc == aa.p_anc)
+				{
+					break;
+				}
+				p_anc = p_anc->next;
+			}
+
+			if (NULL != p_anc)
+			{
+				mp_msg = handle_action(&aa);
+				if (NULL != aa.p_msg)
+				{
+					comms_pool_put(mp_pool, aa.p_msg); // Release the message
+				}
+			}
+			else
+			{
+				err1("p %p", aa.p_anc);
+			}
+		}
+	}
+
+	if (NULL == mp_msg)
+	{
+		p_anc = get_pending_announcer(&timeout_s);
+		if (NULL != p_anc)
+		{
+			debug1("annc %p", p_anc);
+			mp_msg = announce(p_anc, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR);
+			if (NULL != mp_msg)
+			{
+				p_anc->last = osCounterGetSecond();
+				p_anc->announcements++;
+			}
+			else
+			{
+				warn1("msg");
+			}
+			timeout_s = DEVICE_ANNOUNCEMENT_POLL_PERIOD_S;
+		}
+	}
+
+	if (NULL != mp_msg)
+	{
+		if (NULL != p_anc->comms_ctrl)
+		{
+			comms_sleep_block(p_anc->comms_ctrl);
+			while (COMMS_STARTED != comms_status(p_anc->comms));
+			timeout_s = 1; // Leave comms on for 1 second
+		}
+
+		comms_error_t err = comms_send(p_anc->comms, mp_msg, radio_send_done, NULL);
+		logger(COMMS_SUCCESS == err ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
+		if (COMMS_SUCCESS != err)
+		{
+			comms_pool_put(mp_pool, mp_msg);
+			mp_msg = NULL;
+		}
+	}
+	else if (0 == flags) // A timeout just happened and we have nothing to do
+	{
+		allow_sleep();
+		debug1("sleep %"PRIu32, timeout_s);
+	}
+	else
+	{
+		debug1("flgs %"PRIx32" sleep %"PRIu32, flags, timeout_s);
+	}
+
+	osMutexRelease(m_mutex);
+
+	return timeout_s;
+}
+
+
 static void announcement_loop (void * arg)
 {
-	comms_msg_t * p_msg = NULL;
 	uint32_t timeout_s = DEVICE_ANNOUNCEMENT_POLL_PERIOD_S;
 
 	for (;;)
 	{
 		uint32_t flags = osThreadFlagsWait(ANNC_FLAGS, osFlagsWaitAny, timeout_s * 1000UL + 1);
-		device_announcer_t * p_anc = NULL;
 
 		if (osFlagsErrorTimeout == flags)
 		{
 			flags = 0;
 		}
 
-		if (ANNC_FLAG_SNT & flags)
-		{
-			comms_pool_put(mp_pool, p_msg);
-			p_msg = NULL;
-		}
-
-		if (NULL != p_msg)
-		{
-			continue;
-		}
-
-		while (osOK != osMutexAcquire(m_mutex, osWaitForever));
-
-		if (NULL == p_msg)
-		{
-			announcement_action_t aa;
-			if (osOK == osMessageQueueGet(m_action_queue, &aa, NULL, 0))
-			{
-				// Check that the announcer is valid (has not been removed for example)
-				p_anc = mp_announcers;
-				while (NULL != p_anc)
-				{
-					if (p_anc == aa.p_anc)
-					{
-						break;
-					}
-					p_anc = p_anc->next;
-				}
-
-				if (NULL != p_anc)
-				{
-					p_msg = handle_action(&aa);
-					if (NULL != aa.info.p_msg)
-					{
-						comms_pool_put(mp_pool, aa.info.p_msg); // Release the message
-					}
-				}
-				else
-				{
-					err1("p %p", aa.p_anc);
-				}
-			}
-		}
-
-		if (NULL == p_msg)
-		{
-			p_anc = get_pending_announcer(&timeout_s);
-			if (NULL != p_anc)
-			{
-				debug1("annc %p", p_anc);
-				p_msg = announce(p_anc, DEVICE_ANNOUNCEMENT_VERSION, AM_BROADCAST_ADDR);
-				if (NULL != p_msg)
-				{
-					p_anc->last = osCounterGetSecond();
-					p_anc->announcements++;
-				}
-				else
-				{
-					warn1("msg");
-				}
-				timeout_s = DEVICE_ANNOUNCEMENT_POLL_PERIOD_S;
-			}
-		}
-
-		if (NULL != p_msg)
-		{
-			if (NULL != p_anc->comms_ctrl)
-			{
-				comms_sleep_block(p_anc->comms_ctrl);
-				while (COMMS_STARTED != comms_status(p_anc->comms));
-				timeout_s = 1; // Leave comms on for 1 second
-			}
-
-			comms_error_t err = comms_send(p_anc->comms, p_msg, radio_send_done, NULL);
-			logger(COMMS_SUCCESS == err ? LOG_DEBUG1: LOG_WARN1, "snd=%u", err);
-			if (COMMS_SUCCESS != err)
-			{
-				comms_pool_put(mp_pool, p_msg);
-				p_msg = NULL;
-			}
-		}
-		else if (0 == flags) // A timeout just happened and we have nothing to do
-		{
-			update_boot_time();
-			allow_sleep();
-			debug1("sleep %"PRIu32, timeout_s);
-		}
-		else
-		{
-			debug1("flgs %"PRIx32" sleep %"PRIu32, flags, timeout_s);
-		}
-
-		osMutexRelease(m_mutex);
+		timeout_s = process_announcements(flags, timeout_s);
 	}
 }
 
@@ -282,6 +295,7 @@ bool deva_init (comms_pool_t * p_pool)
 	m_boot_time = ((time_t)-1);
 
 	mp_pool = p_pool;
+	mp_msg = NULL;
 
 	const osMutexAttr_t annc_mutex_attr = { "annc", osMutexPrioInherit, NULL, 0U };
 	m_mutex = osMutexNew(&annc_mutex_attr);
@@ -663,21 +677,24 @@ static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void 
 		announcement_action_t aa;
 		aa.p_anc = (device_announcer_t*)user;
 		aa.action = ((uint8_t*)payload)[0];
-		aa.info.p_msg = NULL;
-
+		aa.p_msg = NULL;
 		switch (aa.action)
 		{
 			case DEVA_ANNOUNCEMENT:
 			case DEVA_DESCRIPTION:
 			case DEVA_FEATURES:
-				aa.info.p_msg = comms_pool_get(mp_pool, 0);
-				if (NULL != aa.info.p_msg)
+				aa.p_msg = comms_pool_get(mp_pool, 0);
+				if (NULL != aa.p_msg)
 				{
-					memcpy(aa.info.p_msg, msg, sizeof(comms_msg_t));
+					memcpy(aa.p_msg, msg, sizeof(comms_msg_t));
 					if (osOK != osMessageQueuePut(m_action_queue, &aa, 0, 0))
 					{
 						warn1("qb"); // Queue has overflowed
-						comms_pool_put(mp_pool, aa.info.p_msg);
+						comms_pool_put(mp_pool, aa.p_msg);
+					}
+					else
+					{
+						osThreadFlagsSet(m_thread_id, ANNC_FLAG_RCV);
 					}
 				}
 				else
@@ -690,18 +707,31 @@ static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void 
 			case DEVA_LIST_FEATURES:
 				if (len >= 3)
 				{
-					aa.info.request.offset = ((uint8_t*)payload)[2];
+					aa.request.offset = ((uint8_t*)payload)[2];
+					if (osOK != osMessageQueuePut(m_action_queue, &aa, 0, 0))
+					{
+						warn1("qb"); // Queue has overflowed
+						comms_pool_put(mp_pool, aa.p_msg);
+					}
+					else
+					{
+						osThreadFlagsSet(m_thread_id, ANNC_FLAG_RCV);
+					}
 				}
 			break;
 
 			case DEVA_DESCRIBE:
 			case DEVA_QUERY:
-				aa.info.request.address = source;
-				aa.info.request.version = ((uint8_t*)payload)[1];
+				aa.request.address = source;
+				aa.request.version = ((uint8_t*)payload)[1];
 
 				if (osOK != osMessageQueuePut(m_action_queue, &aa, 0, 0))
 				{
 					warn1("qb"); // Queue has overflowed
+				}
+				else
+				{
+					osThreadFlagsSet(m_thread_id, ANNC_FLAG_RCV);
 				}
 			break;
 
@@ -733,9 +763,9 @@ static comms_msg_t * handle_action (const announcement_action_t * aa)
 	{
 		case DEVA_ANNOUNCEMENT:
 		{
-			uint8_t len = comms_get_payload_length(aa->p_anc->comms, aa->info.p_msg);
-			uint8_t * payload = comms_get_payload(aa->p_anc->comms, aa->info.p_msg, len);
-			am_addr_t source = comms_am_get_source(aa->p_anc->comms, aa->info.p_msg);
+			uint8_t len = comms_get_payload_length(aa->p_anc->comms, aa->p_msg);
+			uint8_t * payload = comms_get_payload(aa->p_anc->comms, aa->p_msg, len);
+			am_addr_t source = comms_am_get_source(aa->p_anc->comms, aa->p_msg);
 			uint8_t version = ((uint8_t*)payload)[1];
 
 			if (version == DEVICE_ANNOUNCEMENT_VERSION)
@@ -793,14 +823,14 @@ static comms_msg_t * handle_action (const announcement_action_t * aa)
 		break;
 
 		case DEVA_QUERY:
-			info1("qry v%d %04"PRIX16, (int)adjust_version(aa->info.request.version), aa->info.request.address);
-			return announce(aa->p_anc, adjust_version(aa->info.request.version), aa->info.request.address);
+			info1("qry v%d %04"PRIX16, (int)adjust_version(aa->request.version), aa->request.address);
+			return announce(aa->p_anc, adjust_version(aa->request.version), aa->request.address);
 		case DEVA_DESCRIBE:
-			info1("dsc %04"PRIX16, aa->info.request.address);
-			return describe(aa->p_anc, adjust_version(aa->info.request.version), aa->info.request.address);
+			info1("dsc %04"PRIX16, aa->request.address);
+			return describe(aa->p_anc, adjust_version(aa->request.version), aa->request.address);
 		case DEVA_LIST_FEATURES:
-			info1("lst %04"PRIX16, aa->info.request.address);
-			return list_features(aa->p_anc, aa->info.request.address, aa->info.request.offset);
+			info1("lst %04"PRIX16, aa->request.address);
+			return list_features(aa->p_anc, aa->request.address, aa->request.offset);
 
 		default:
 			warn1("dflt %d", (int)aa->action);
@@ -809,3 +839,15 @@ static comms_msg_t * handle_action (const announcement_action_t * aa)
 
 	return NULL;
 }
+
+
+#ifdef UNITTEST
+
+#include "device_announcement_test.h"
+
+uint32_t unittest_process_announcements (uint32_t flags, uint32_t current_timeout_s)
+{
+	return process_announcements(flags, current_timeout_s);
+}
+
+#endif//UNITTEST
