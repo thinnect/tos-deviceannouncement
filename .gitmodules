@@ -1,12 +1,32 @@
 [submodule "test/zoo/thinnect.mist-comm"]
 	path = test/zoo/thinnect.mist-comm
 	url = https://github.com/thinnect/mist-comm.git
+	branch = cleanup21
 [submodule "test/zoo/thinnect.device-signature"]
 	path = test/zoo/thinnect.device-signature
 	url = https://github.com/thinnect/device-signature.git
+	branch = master
+[submodule "test/zoo/thinnect.node-platform"]
+	path = test/zoo/thinnect.node-platform
+	url = https://github.com/thinnect/node-platform.git
+	branch = master
 [submodule "test/zoo/thinnect.lll"]
 	path = test/zoo/thinnect.lll
 	url = https://github.com/thinnect/lll.git
+	branch = master
 [submodule "test/zoo/jtbr.endianness"]
 	path = test/zoo/jtbr.endianness
 	url = https://gist.github.com/4163b8ec6672aabb0656b96692af5e33.git
+	branch = master
+[submodule "test/zoo/lammertb.libcrc"]
+	path = test/zoo/lammertb.libcrc
+	url = https://github.com/lammertb/libcrc.git
+	branch = master
+[submodule "test/zoo/thinnect.cmsis-ext"]
+	path = test/zoo/thinnect.cmsis-ext
+	url = https://github.com/thinnect/cmsis-ext.git
+	branch = dev
+[submodule "test/zoo/thinnect.cmsis-freertos"]
+	path = test/zoo/thinnect.cmsis-freertos
+	url = https://github.com/thinnect/cmsis-freertos
+	branch = freertos-source-change

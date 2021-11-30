@@ -10,94 +10,116 @@
 
 #include "loglevels.h"
 #define __MODUUL__ "DevF"
-#define __LOG_LEVEL__ ( LOG_LEVEL_devicefeatures & BASE_LOG_LEVEL )
+#define __LOG_LEVEL__ ( LOG_LEVEL_device_features & BASE_LOG_LEVEL )
 #include "log.h"
 
-static device_feature_t* m_features;
+static device_feature_t * mp_features;
 static uint8_t m_count;
 
-void devf_init() {
-	m_features = NULL;
+void devf_init ()
+{
+	mp_features = NULL;
 	m_count = 0;
 }
 
-uint8_t devf_count() {
+uint8_t devf_count ()
+{
 	return m_count;
 }
 
-uint32_t devf_hash() { // Really simple for now, just a sum of bytes
-	uint32_t hash = 0;
-	device_feature_t* f = m_features;
-	while(f != NULL) {
-		for(uint8_t i=0;i<sizeof(nx_uuid_t);i++) {
-			hash += ((uint8_t*)&(f->uuid))[i];
+uint32_t devf_hash ()
+{
+	uint32_t hash = 0;  // Really simple for now, just a sum of bytes
+	device_feature_t * pf = mp_features;
+	while (NULL != pf)
+	{
+		for (uint8_t i=0; i < sizeof(nx_uuid_t); i++)
+		{
+			hash += ((uint8_t*)&(pf->uuid))[i];
 		}
-		f = f->next;
+		pf = pf->next;
 	}
 	return hash;
 }
 
-bool devf_get_feature(uint8_t fnum, nx_uuid_t* ftr) {
-	device_feature_t* f = m_features;
-	for(uint8_t i=0; i<fnum; i++) {
-		if(f == NULL) {
+bool devf_get_feature (uint8_t fnum, nx_uuid_t* pftr)
+{
+	device_feature_t * pf = mp_features;
+	for (uint8_t i=0; i < fnum; i++)
+	{
+		if  (NULL == pf)
+		{
 			return false;
 		}
-		f = f->next;
+		pf = pf->next;
 	}
-	if(f != NULL) {
-		memcpy(ftr, &(f->uuid), sizeof(nx_uuid_t));
+	if (NULL != pf)
+	{
+		memcpy(pftr, &(pf->uuid), sizeof(nx_uuid_t));
 		return true;
 	}
 	return false;
 }
 
-bool devf_add_feature(device_feature_t* ftr, nx_uuid_t* feature) {
-	device_feature_t* f = m_features;
-	while(f != NULL) {
+bool devf_add_feature (device_feature_t * pftr, nx_uuid_t * puuid)
+{
+	device_feature_t * pf = mp_features;
+	while (NULL != pf)
+	{
 		// Features must not be added multiple times
-		debug1("%d %p %p %p %p %d", (int)m_count, ftr, feature, f, &(f->uuid), sizeof(nx_uuid_t));
-		if((f == ftr)||(memcmp(&(f->uuid), feature, sizeof(nx_uuid_t)) == 0)) {
-			warnb1("dup %p %p", feature, sizeof(nx_uuid_t), ftr, f);
+		debug1("%d %p %p %p %p %d", (int)m_count, pftr, puuid, pf, &(pf->uuid), sizeof(nx_uuid_t));
+		if ((pf == pftr)||(0 == memcmp(&(pf->uuid), puuid, sizeof(nx_uuid_t))))
+		{
+			warnb1("dup %p %p", puuid, sizeof(nx_uuid_t), pftr, pf);
 			return false;
 		}
-		if(f->next == NULL) {
+		if (NULL == pf->next)
+		{
 			break;
 		}
-		else {
-			f = f->next;
+		else
+		{
+			pf = pf->next;
 		}
 	}
 
-	if(f == NULL) {
-		m_features = ftr;
+	if (NULL == pf)
+	{
+		mp_features = pftr;
 	}
-	else {
-		f->next = ftr; // Append to the end
+	else
+	{
+		pf->next = pftr; // Append to the end
 	}
 
-	memcpy(&(ftr->uuid), feature, sizeof(nx_uuid_t));
-	ftr->next = NULL;
+	memcpy(&(pftr->uuid), puuid, sizeof(nx_uuid_t));
+	pftr->next = NULL;
 	m_count++;
 	return true;
 }
 
-bool devf_remove_feature(device_feature_t* ftr) {
-	if(m_features != NULL) {
-		if(m_features == ftr) {
-			m_features = m_features->next;
+bool devf_remove_feature (device_feature_t * pftr)
+{
+	if (NULL != mp_features)
+	{
+		if (mp_features == pftr)
+		{
+			mp_features = mp_features->next;
 			m_count--;
 			return true;
 		}
-		else {
-			device_feature_t* f = m_features;
-			while(f->next != NULL) {
-				if(f->next == ftr) {
-					f->next = f->next->next;
+		else
+		{
+			device_feature_t * pf = mp_features;
+			while (NULL != pf->next)
+			{
+				if (pf->next == pftr)
+				{
+					pf->next = pf->next->next;
 					m_count--;
 					return true;
 				}
-				f = ftr->next;
+				pf = pftr->next;
 			}
 		}
 	}

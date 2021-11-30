@@ -1,6 +1,8 @@
 language: c
+dist: bionic
 sudo: false
 script:
+  - make -C test clean
   - make -C test
   - cd test
   - ./test-app

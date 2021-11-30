@@ -13,7 +13,7 @@
 #define DEVICE_ANNOUNCEMENT_VERSION_V2 0x02
 #define DEVICE_ANNOUNCEMENT_VERSION    0x02
 
-#include "time64.h"
+#include <time.h>
 #include "UniversallyUniqueIdentifier.h"
 
 #ifndef NESC
