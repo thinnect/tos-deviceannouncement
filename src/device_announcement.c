@@ -72,8 +72,11 @@ static void radio_status_changed (comms_layer_t * comms, comms_status_t status, 
 static void radio_send_done (comms_layer_t * comms, comms_msg_t * msg, comms_error_t result, void * user);
 static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void * user);
 
+static void check_pending_describer (void);
+static void put_device_describe_msg (void);
 
 static device_announcer_t * mp_announcers;
+static device_announcer_t* mp_describer = NULL;
 
 static time_t m_boot_time;
 
@@ -281,6 +284,7 @@ static void announcement_loop (void * arg)
 
 		if (osFlagsErrorTimeout == flags)
 		{
+			check_pending_describer();
 			flags = 0;
 		}
 
@@ -643,6 +647,81 @@ static comms_msg_t * list_features(device_announcer_t* an, am_addr_t destination
 	else warn1("pool");
 
 	return NULL;
+}
+
+// ----------------------------------------------------------------------------
+//	Adds device describer which sends DEVA_DESCRIBE messages at regular interval
+// ----------------------------------------------------------------------------
+bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uint32_t period_s)
+{
+	p_dscr->comms = p_comms;
+	p_dscr->comms_ctrl = NULL;
+	p_dscr->period = period_s;
+	p_dscr->last = osCounterGetSecond() - (rand() % next_announcement(0, p_dscr->period));
+	p_dscr->announcements = 0;
+	p_dscr->next = NULL;
+	// set local describer
+	device_announcer_t** pp_dscr = &mp_describer;
+	*pp_dscr = p_dscr;
+
+	if ((period_s >= DEVA_MIN_PERIOD_S) && (period_s <= DEVA_MAX_PERIOD_S))
+	{
+		debug1("Dscr:%p nxt:%u", mp_describer, p_dscr->last + next_announcement(0, p_dscr->period) - osCounterGetSecond());
+	}
+	else
+	{
+		warn1("Dscr:%p nvr!", mp_describer);
+		return false;
+	}
+
+	return true;
+}
+
+// ----------------------------------------------------------------------------
+//	Checks describer send time, if passed then puts describe message
+//	to the m_action_queue
+// ----------------------------------------------------------------------------
+static void check_pending_describer (void)
+{
+	uint32_t now = osCounterGetSecond();
+
+	// Limit period to "reasonable" values to not break calculations
+	if ((mp_describer->period >= DEVA_MIN_PERIOD_S) && (mp_describer->period <= DEVA_MAX_PERIOD_S))
+	{
+		uint32_t next = mp_describer->last + next_announcement(mp_describer->announcements, mp_describer->period);
+		debug1("NxtDscr:%u", next);
+		if (next <= now)
+		{
+			debug1("Put dscr");
+			mp_describer->last = osCounterGetSecond();
+			mp_describer->announcements++;
+			put_device_describe_msg();
+		}
+	}
+}
+
+// ----------------------------------------------------------------------------
+//	Puts DEVA_DESCRIBE message to the m_action_queue to initiate message sending
+//	Used to send DEVA_DESCRIBE message at regular interval
+// ----------------------------------------------------------------------------
+static void put_device_describe_msg (void)
+{
+	announcement_action_t aa;
+	aa.p_anc = mp_describer;
+	aa.action = DEVA_DESCRIBE;
+	aa.p_msg = NULL;
+	aa.request.address = AM_BROADCAST_ADDR;
+	aa.request.version = DEVICE_ANNOUNCEMENT_VERSION;
+
+	if (osOK == osMessageQueuePut(m_action_queue, &aa, 0, 0))
+	{
+		debug1("Dscr msg added");
+		osThreadFlagsSet(m_thread_id, ANNC_FLAG_RCV);
+	}
+	else
+	{
+		warn1("QFull!"); // Queue has overflowed
+	}
 }
 
 

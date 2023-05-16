@@ -46,6 +46,15 @@ bool deva_add_announcer(device_announcer_t* announcer,
 bool deva_remove_announcer(device_announcer_t* announcer);
 
 /**
+ * Adds a device describer which sends DEVA_DESCRIBE messages at regular interval
+ * @param announcer Memory for an describer, make sure it does not go out of scope!
+ * @param comms A comms layer to use for describer.
+ * @param period_s Announcement period, set to 0 for no describer.
+ * @return true if a describer was added.
+ */
+bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uint32_t period_s);
+
+/**
  * Add a local listener for announcements made by other devices.
  * TODO
  */
