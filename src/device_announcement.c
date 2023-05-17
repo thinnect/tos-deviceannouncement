@@ -177,6 +177,8 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 
 	update_boot_time();
 
+	debug2("flgs:%X mp_msg:%p", flags, mp_msg);
+
 	if (ANNC_FLAG_SNT & flags)
 	{
 		comms_pool_put(mp_pool, mp_msg);
@@ -205,7 +207,9 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 				}
 				p_anc = p_anc->next;
 			}
-
+			
+			debug2("p_anc:%p aa.p_anc:%p dscr:%p", p_anc, aa.p_anc, mp_describer);
+			
 			if (NULL != p_anc)
 			{
 				mp_msg = handle_action(&aa);
@@ -216,10 +220,22 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 			}
 			else
 			{
-				err1("p %p", aa.p_anc);
+				// if it was not announcer then check describer
+				if (aa.p_anc == mp_describer)
+				{
+					mp_msg = handle_action(&aa);
+					// we have to set p_anc because it will be used later on 
+					p_anc = mp_describer;
+				}
+				else
+				{
+					err1("p:%p", aa.p_anc);
+				}
 			}
 		}
 	}
+
+	debug2("mp_msg:%p p_anc:%p", mp_msg, p_anc);
 
 	if (NULL == mp_msg)
 	{
@@ -657,7 +673,7 @@ bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uin
 	p_dscr->comms = p_comms;
 	p_dscr->comms_ctrl = NULL;
 	p_dscr->period = period_s;
-	p_dscr->last = osCounterGetSecond() - (rand() % next_announcement(0, p_dscr->period));
+	p_dscr->last = osCounterGetSecond();
 	p_dscr->announcements = 0;
 	p_dscr->next = NULL;
 	// set local describer
@@ -666,7 +682,7 @@ bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uin
 
 	if ((period_s >= DEVA_MIN_PERIOD_S) && (period_s <= DEVA_MAX_PERIOD_S))
 	{
-		debug1("Dscr:%p nxt:%u", mp_describer, p_dscr->last + next_announcement(0, p_dscr->period) - osCounterGetSecond());
+		debug1("Dscr:%p nxt:%u", mp_describer, p_dscr->period);
 	}
 	else
 	{
@@ -688,8 +704,8 @@ static void check_pending_describer (void)
 	// Limit period to "reasonable" values to not break calculations
 	if ((mp_describer->period >= DEVA_MIN_PERIOD_S) && (mp_describer->period <= DEVA_MAX_PERIOD_S))
 	{
-		uint32_t next = mp_describer->last + next_announcement(mp_describer->announcements, mp_describer->period);
-		debug1("NxtDscr:%u", next);
+		uint32_t next = mp_describer->last + mp_describer->period;
+		debug1("NxtDscr:%ds", (int)(next - now));
 		if (next <= now)
 		{
 			debug1("Put dscr");
@@ -697,6 +713,10 @@ static void check_pending_describer (void)
 			mp_describer->announcements++;
 			put_device_describe_msg();
 		}
+	}
+	else
+	{
+		warn1("Dscr per!");
 	}
 }
 
@@ -902,13 +922,13 @@ static comms_msg_t * handle_action (const announcement_action_t * aa)
 		break;
 
 		case DEVA_QUERY:
-			info1("qry v%d %04"PRIX16, (int)adjust_version(aa->request.version), aa->request.address);
+			info1("qry:v%d->%04"PRIX16, (int)adjust_version(aa->request.version), aa->request.address);
 			return announce(aa->p_anc, adjust_version(aa->request.version), aa->request.address);
 		case DEVA_DESCRIBE:
-			info1("dsc %04"PRIX16, aa->request.address);
+			info1("dsc->%04"PRIX16, aa->request.address);
 			return describe(aa->p_anc, adjust_version(aa->request.version), aa->request.address);
 		case DEVA_LIST_FEATURES:
-			info1("lst %04"PRIX16, aa->request.address);
+			info1("lst->%04"PRIX16, aa->request.address);
 			return list_features(aa->p_anc, aa->request.address, aa->request.offset);
 
 		default:
