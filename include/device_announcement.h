@@ -55,6 +55,13 @@ bool deva_remove_announcer(device_announcer_t* announcer);
 bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uint32_t period_s);
 
 /**
+ * Change device describer sending period
+ * @param period_s Announcement period, set to 0 for no describer.
+ * @return true on success
+ */
+bool deva_change_describer_period (uint32_t period_s);
+
+/**
  * Add a local listener for announcements made by other devices.
  * TODO
  */

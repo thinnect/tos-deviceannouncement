@@ -221,7 +221,7 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 			else
 			{
 				// if it was not announcer then check describer
-				if (aa.p_anc == mp_describer)
+				if ((NULL != mp_describer) && (aa.p_anc == mp_describer))
 				{
 					mp_msg = handle_action(&aa);
 					// we have to set p_anc because it will be used later on 
@@ -670,27 +670,47 @@ static comms_msg_t * list_features(device_announcer_t* an, am_addr_t destination
 // ----------------------------------------------------------------------------
 bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uint32_t period_s)
 {
-	p_dscr->comms = p_comms;
-	p_dscr->comms_ctrl = NULL;
-	p_dscr->period = period_s;
-	p_dscr->last = osCounterGetSecond();
-	p_dscr->announcements = 0;
-	p_dscr->next = NULL;
-	// set local describer
-	device_announcer_t** pp_dscr = &mp_describer;
-	*pp_dscr = p_dscr;
-
-	if ((period_s >= DEVA_MIN_PERIOD_S) && (period_s <= DEVA_MAX_PERIOD_S))
+	if (NULL != p_dscr)
 	{
-		debug1("Dscr:%p nxt:%u", mp_describer, p_dscr->period);
+		p_dscr->comms = p_comms;
+		p_dscr->comms_ctrl = NULL;
+		p_dscr->period = period_s;
+		p_dscr->last = osCounterGetSecond();
+		p_dscr->announcements = 0;
+		p_dscr->next = NULL;
+		// set local describer
+		mp_describer = p_dscr;
+
+		if ((period_s >= DEVA_MIN_PERIOD_S) && (period_s <= DEVA_MAX_PERIOD_S))
+		{
+			debug1("Dscr:%p nxt:%u", mp_describer, p_dscr->period);
+		}
+		else
+		{
+			warn1("Dscr:%p nvr!", mp_describer);
+			return false;
+		}
+
+		return true;
 	}
 	else
 	{
-		warn1("Dscr:%p nvr!", mp_describer);
+		err1("Dscr!");
 		return false;
 	}
+}
 
-	return true;
+// ----------------------------------------------------------------------------
+//	Change device describer sending period
+// ----------------------------------------------------------------------------
+bool deva_change_describer_period (uint32_t period_s)
+{
+	if (NULL != mp_describer)
+	{
+		mp_describer->period = period_s;
+		return true;
+	}
+	return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -699,24 +719,27 @@ bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uin
 // ----------------------------------------------------------------------------
 static void check_pending_describer (void)
 {
-	uint32_t now = osCounterGetSecond();
+	if (NULL != mp_describer)
+	{
+		uint32_t now = osCounterGetSecond();
 
-	// Limit period to "reasonable" values to not break calculations
-	if ((mp_describer->period >= DEVA_MIN_PERIOD_S) && (mp_describer->period <= DEVA_MAX_PERIOD_S))
-	{
-		uint32_t next = mp_describer->last + mp_describer->period;
-		debug1("NxtDscr:%ds", (int)(next - now));
-		if (next <= now)
+		// Limit period to "reasonable" values to not break calculations
+		if ((mp_describer->period >= DEVA_MIN_PERIOD_S) && (mp_describer->period <= DEVA_MAX_PERIOD_S))
 		{
-			debug1("Put dscr");
-			mp_describer->last = osCounterGetSecond();
-			mp_describer->announcements++;
-			put_device_describe_msg();
+			uint32_t next = mp_describer->last + mp_describer->period;
+			debug1("NxtDscr:%ds", (int)(next - now));
+			if (next <= now)
+			{
+				debug1("Put dscr");
+				mp_describer->last = osCounterGetSecond();
+				mp_describer->announcements++;
+				put_device_describe_msg();
+			}
 		}
-	}
-	else
-	{
-		warn1("Dscr per!");
+		else
+		{
+			warn1("Dscr per!");
+		}
 	}
 }
 
