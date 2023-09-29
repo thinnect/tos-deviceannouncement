@@ -16,6 +16,11 @@
 
 #include "node_lifetime.h"
 #include "node_coordinates.h"
+#include "supply_voltage_reader.h"
+#include "battery_voltage_reader.h"
+#include "lptsleep.h"
+#include "radio.h"
+#include "beatstack.h"
 
 #include "endianness.h"
 
@@ -460,7 +465,7 @@ static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr
 				length = sizeof(device_announcement_v1_t);
 			}
 		}
-		else
+		else if (2 == version)
 		{
 			device_announcement_v2_t * anc = (device_announcement_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v2_t));
 			if (NULL != anc)
@@ -501,6 +506,70 @@ static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr
 
 				length = sizeof(device_announcement_v2_t);
 			}
+		}
+		else if (3 == version)
+		{
+			device_announcement_v3_t * anc = (device_announcement_v3_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v3_t));
+			if (NULL != anc)
+			{
+				anc->header = DEVA_ANNOUNCEMENT;
+				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+				sigGetEui64((uint8_t*)anc->guid);
+				anc->boot_number = hton32(node_lifetime_boots());
+
+				anc->boot_time = hton64(m_boot_time);
+				anc->lifetime = hton32(node_lifetime_seconds());
+				anc->announcement = hton32(an->announcements);
+
+				nx_uuid_application(&(anc->uuid));
+
+				anc->uptime = hton32(osCounterGetSecond());
+				anc->radio_sleep_time = hton32(radio_sleep_time() / 1000);
+				anc->cpu_sleep_time = hton32(ulLowPowerSleepTime() / 1000);
+
+				uint16_t millivolts = 0;
+				// Should be defined in Makefile!
+				#ifdef NO_BATTERY_SUPPLY
+				{
+					anc->battery = hton32(millivolts);
+				}
+				#else
+				{
+					#ifdef DIRECT_BATTERY_SUPPLY
+					{
+						SupplyVoltageReader_init();
+						millivolts = SupplyVoltageReader_read();
+						SupplyVoltageReader_deinit();
+					}
+					#else
+					{
+						read_battery_voltage(&millivolts);
+					}
+					#endif
+				}
+				#endif
+
+				anc->battery = hton32(millivolts);
+
+				anc->radio_channel = radio_channel(); // FIXME
+
+				anc->feature_list_hash = hton32(devf_hash());
+				// get cluster members
+				uint16_t* members;
+				uint8_t members_count; 
+				members = beatstack_cluster_members (&members_count);
+				for (uint8_t idx; idx < members_count; ++idx)
+				{
+					anc->members[idx] = hton16(*members++);
+				}
+				
+
+				length = sizeof(device_announcement_v3_t);
+			}
+		}
+		else
+		{
+			err1("Unknown annc!");
 		}
 
 		if (length > 0)

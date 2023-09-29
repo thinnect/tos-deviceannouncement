@@ -11,7 +11,8 @@
 
 #define DEVICE_ANNOUNCEMENT_VERSION_V1 0x01
 #define DEVICE_ANNOUNCEMENT_VERSION_V2 0x02
-#define DEVICE_ANNOUNCEMENT_VERSION    0x02
+#define DEVICE_ANNOUNCEMENT_VERSION_V3 0x03
+#define DEVICE_ANNOUNCEMENT_VERSION    DEVICE_ANNOUNCEMENT_VERSION_V3
 
 #include <time.h>
 #include "UniversallyUniqueIdentifier.h"
@@ -94,6 +95,34 @@ typedef nx_struct device_announcement_v2 {
 	nx_uint32_t feature_list_hash; // hash of feature UUIDs
 } device_announcement_v2_t;
 // 2+8+4+20+16+RDO+13+8+4=75
+#pragma pack(pop)
+
+#pragma pack(push, 1)
+typedef nx_struct device_announcement_v3 {
+	nx_uint8_t header;				// 00 - packet type - device announcement
+	nx_uint8_t version;            	// 03 - Protocol version
+	nx_uint8_t guid[8];            	// Device EUI64
+	nx_uint32_t boot_number;       	// Current boot number
+
+	nx_time64_t boot_time;         	// Unix timestamp, seconds
+	nx_uint32_t lifetime;          	// Total uptime since production, potentially lossy, seconds
+	nx_uint32_t announcement;      	// Announcement number since boot
+
+	nx_uuid_t uuid;                	// Application UUID (general feature set)
+									// Diagnostic info
+	nx_uint32_t uptime;				// Uptime since boot, seconds
+	nx_uint32_t radio_sleep_time;	// Radio sleep time, seconds
+	nx_uint32_t cpu_sleep_time;		// CPU sleep time, seconds
+	nx_uint32_t battery;			// Battery voltage
+	
+	nx_uint8_t radio_channel;      	// Current primary radio channel of the device - 0 unknown / 255 hopping
+
+	nx_uint32_t feature_list_hash;	// Hash of feature UUIDs
+
+	nx_uint16_t members[7];			// Cluster member ID-s
+
+} device_announcement_v3_t;
+// Total bytes 81
 #pragma pack(pop)
 
 #pragma pack(push, 1)
