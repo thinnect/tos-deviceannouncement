@@ -558,7 +558,7 @@ static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr
 				uint16_t* members;
 				uint8_t members_count; 
 				members = beatstack_cluster_members (&members_count);
-				for (uint8_t idx; idx < members_count; ++idx)
+				for (uint8_t idx = 0; idx < members_count; ++idx)
 				{
 					anc->members[idx] = hton16(*members++);
 				}
