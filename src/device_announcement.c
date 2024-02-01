@@ -77,8 +77,11 @@ static void radio_status_changed (comms_layer_t * comms, comms_status_t status, 
 static void radio_send_done (comms_layer_t * comms, comms_msg_t * msg, comms_error_t result, void * user);
 static void radio_receive (comms_layer_t * comms, const comms_msg_t * msg, void * user);
 
+static void check_pending_describer (void);
+static void put_device_describe_msg (void);
 
 static device_announcer_t * mp_announcers;
+static device_announcer_t* mp_describer = NULL;
 
 static time_t m_boot_time;
 
@@ -179,6 +182,8 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 
 	update_boot_time();
 
+	debug2("flgs:%X mp_msg:%p", flags, mp_msg);
+
 	if (ANNC_FLAG_SNT & flags)
 	{
 		comms_pool_put(mp_pool, mp_msg);
@@ -207,7 +212,9 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 				}
 				p_anc = p_anc->next;
 			}
-
+			
+			debug2("p_anc:%p aa.p_anc:%p dscr:%p", p_anc, aa.p_anc, mp_describer);
+			
 			if (NULL != p_anc)
 			{
 				mp_msg = handle_action(&aa);
@@ -218,10 +225,22 @@ static uint32_t process_announcements (uint32_t flags, uint32_t current_timeout_
 			}
 			else
 			{
-				err1("p %p", aa.p_anc);
+				// if it was not announcer then check describer
+				if ((NULL != mp_describer) && (aa.p_anc == mp_describer))
+				{
+					mp_msg = handle_action(&aa);
+					// we have to set p_anc because it will be used later on 
+					p_anc = mp_describer;
+				}
+				else
+				{
+					err1("p:%p", aa.p_anc);
+				}
 			}
 		}
 	}
+
+	debug2("mp_msg:%p p_anc:%p", mp_msg, p_anc);
 
 	if (NULL == mp_msg)
 	{
@@ -286,6 +305,7 @@ static void announcement_loop (void * arg)
 
 		if (osFlagsErrorTimeout == flags)
 		{
+			check_pending_describer();
 			flags = 0;
 		}
 
@@ -714,6 +734,108 @@ static comms_msg_t * list_features(device_announcer_t* an, am_addr_t destination
 	return NULL;
 }
 
+// ----------------------------------------------------------------------------
+//	Adds device describer which sends DEVA_DESCRIBE messages at regular interval
+// ----------------------------------------------------------------------------
+bool deva_add_describer (device_announcer_t* p_dscr, comms_layer_t* p_comms, uint32_t period_s)
+{
+	if (NULL != p_dscr)
+	{
+		p_dscr->comms = p_comms;
+		p_dscr->comms_ctrl = NULL;
+		p_dscr->period = period_s;
+		p_dscr->last = osCounterGetSecond();
+		p_dscr->announcements = 0;
+		p_dscr->next = NULL;
+		// set local describer
+		mp_describer = p_dscr;
+
+		if ((period_s >= DEVA_MIN_PERIOD_S) && (period_s <= DEVA_MAX_PERIOD_S))
+		{
+			debug1("Dscr:%p nxt:%u", mp_describer, p_dscr->period);
+		}
+		else
+		{
+			warn1("Dscr:%p nvr!", mp_describer);
+			return false;
+		}
+
+		return true;
+	}
+	else
+	{
+		err1("Dscr!");
+		return false;
+	}
+}
+
+// ----------------------------------------------------------------------------
+//	Change device describer sending period
+// ----------------------------------------------------------------------------
+bool deva_change_describer_period (uint32_t period_s)
+{
+	if (NULL != mp_describer)
+	{
+		mp_describer->period = period_s;
+		return true;
+	}
+	return false;
+}
+
+// ----------------------------------------------------------------------------
+//	Checks describer send time, if passed then puts describe message
+//	to the m_action_queue
+// ----------------------------------------------------------------------------
+static void check_pending_describer (void)
+{
+	if (NULL != mp_describer)
+	{
+		uint32_t now = osCounterGetSecond();
+
+		// Limit period to "reasonable" values to not break calculations
+		if ((mp_describer->period >= DEVA_MIN_PERIOD_S) && (mp_describer->period <= DEVA_MAX_PERIOD_S))
+		{
+			uint32_t next = mp_describer->last + mp_describer->period;
+			debug1("NxtDscr:%ds", (int)(next - now));
+			if (next <= now)
+			{
+				debug1("Put dscr");
+				mp_describer->last = osCounterGetSecond();
+				mp_describer->announcements++;
+				put_device_describe_msg();
+			}
+		}
+		else
+		{
+			warn1("Dscr per!");
+		}
+	}
+}
+
+// ----------------------------------------------------------------------------
+//	Puts DEVA_DESCRIBE message to the m_action_queue to initiate message sending
+//	Used to send DEVA_DESCRIBE message at regular interval
+// ----------------------------------------------------------------------------
+static void put_device_describe_msg (void)
+{
+	announcement_action_t aa;
+	aa.p_anc = mp_describer;
+	aa.action = DEVA_DESCRIBE;
+	aa.p_msg = NULL;
+	aa.request.address = AM_BROADCAST_ADDR;
+	aa.request.version = DEVICE_ANNOUNCEMENT_VERSION;
+
+	if (osOK == osMessageQueuePut(m_action_queue, &aa, 0, 0))
+	{
+		debug1("Dscr msg added");
+		osThreadFlagsSet(m_thread_id, ANNC_FLAG_RCV);
+	}
+	else
+	{
+		warn1("QFull!"); // Queue has overflowed
+	}
+}
+
 
 static void radio_status_changed (comms_layer_t * comms, comms_status_t status, void * user)
 {
@@ -892,13 +1014,13 @@ static comms_msg_t * handle_action (const announcement_action_t * aa)
 		break;
 
 		case DEVA_QUERY:
-			info1("qry v%d %04"PRIX16, (int)adjust_version(aa->request.version), aa->request.address);
+			info1("qry:v%d->%04"PRIX16, (int)adjust_version(aa->request.version), aa->request.address);
 			return announce(aa->p_anc, adjust_version(aa->request.version), aa->request.address);
 		case DEVA_DESCRIBE:
-			info1("dsc %04"PRIX16, aa->request.address);
+			info1("dsc->%04"PRIX16, aa->request.address);
 			return describe(aa->p_anc, adjust_version(aa->request.version), aa->request.address);
 		case DEVA_LIST_FEATURES:
-			info1("lst %04"PRIX16, aa->request.address);
+			info1("lst->%04"PRIX16, aa->request.address);
 			return list_features(aa->p_anc, aa->request.address, aa->request.offset);
 
 		default:
