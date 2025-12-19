@@ -12,7 +12,10 @@
 #define DEVICE_ANNOUNCEMENT_VERSION_V1 0x01
 #define DEVICE_ANNOUNCEMENT_VERSION_V2 0x02
 #define DEVICE_ANNOUNCEMENT_VERSION_V3 0x03
-#define DEVICE_ANNOUNCEMENT_VERSION    DEVICE_ANNOUNCEMENT_VERSION_V2
+
+#ifndef DEVICE_ANNOUNCEMENT_VERSION
+#define DEVICE_ANNOUNCEMENT_VERSION    DEVICE_ANNOUNCEMENT_VERSION_V3
+#endif
 
 #include <time.h>
 #include "UniversallyUniqueIdentifier.h"
@@ -114,7 +117,7 @@ typedef nx_struct device_announcement_v3 {
 	nx_uint32_t radio_sleep_time;	// Radio sleep time, seconds
 	nx_uint32_t cpu_sleep_time;		// CPU sleep time, seconds
 	nx_uint32_t battery;			// Battery voltage
-	
+
 	nx_uint8_t radio_channel;      	// Current primary radio channel of the device - 0 unknown / 255 hopping
 
 	nx_uint32_t feature_list_hash;	// Hash of feature UUIDs
