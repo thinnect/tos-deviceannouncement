@@ -30,6 +30,9 @@
 #include "mist_comm_am.h"
 #include "mist_comm_pool.h"
 
+#include "devp_pan_id.h"
+#include "devp_bootloader.h"
+
 #include "loglevels.h"
 #define __MODUUL__ "DevA"
 #define __LOG_LEVEL__ ( LOG_LEVEL_device_announcement & BASE_LOG_LEVEL )
@@ -587,6 +590,67 @@ static comms_msg_t * announce (device_announcer_t * an, uint8_t version, am_addr
 				length = sizeof(device_announcement_v3_t);
 			}
 		}
+		else if (4 == version)
+		{
+			device_announcement_v4_t * anc = (device_announcement_v4_t*)comms_get_payload(an->comms, msg, sizeof(device_announcement_v4_t));
+			if (NULL != anc)
+			{
+				anc->header = DEVA_ANNOUNCEMENT;
+				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+				sigGetEui64((uint8_t*)anc->guid);
+				anc->boot_number = hton32(node_lifetime_boots());
+
+				anc->boot_time = hton64(m_boot_time);
+				anc->lifetime = hton32(node_lifetime_seconds());
+				anc->announcement = hton32(an->announcements);
+
+				nx_uuid_application(&(anc->uuid));
+
+				anc->uptime = hton32(osCounterGetSecond());
+				anc->radio_sleep_time = hton32(radio_sleep_time() / 1000);
+				anc->cpu_sleep_time = hton32(ulLowPowerSleepTime() / 1000);
+
+				uint16_t millivolts = 0;
+				// Should be defined in Makefile!
+				#ifdef NO_BATTERY_SUPPLY
+				{
+					anc->battery = hton32(millivolts);
+				}
+				#else
+				{
+					#ifdef DIRECT_BATTERY_SUPPLY
+					{
+						SupplyVoltageReader_init();
+						millivolts = SupplyVoltageReader_read();
+						SupplyVoltageReader_deinit();
+					}
+					#else
+					{
+						read_battery_voltage(&millivolts);
+					}
+					#endif
+				}
+				#endif
+
+				anc->battery = hton32(millivolts);
+
+				anc->radio_channel = radio_channel(); // FIXME
+				anc->radio_pan_id = (uint8_t)devp_pan_id_get();
+
+				anc->feature_list_hash = hton32(devf_hash());
+				// get cluster members
+				uint16_t* members;
+				uint8_t members_count; 
+				members = beatstack_cluster_members (&members_count);
+				for (uint8_t idx = 0; idx < members_count; ++idx)
+				{
+					anc->members[idx] = hton16(*members++);
+				}
+				
+
+				length = sizeof(device_announcement_v4_t);
+			}
+		}
 		else
 		{
 			err1("Unknown annc!");
@@ -613,7 +677,7 @@ static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t
 	{
 		uint8_t length = 0;
 		comms_init_message(an->comms, msg);
-		if (version == 1)
+		if (1 == version)
 		{
 			device_description_v1_t* anc = (device_description_v1_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v1_t));
 			if (NULL != anc)
@@ -636,7 +700,7 @@ static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t
 				length = sizeof(device_description_v1_t);
 			}
 		}
-		else
+		else if ((2 == version) || (3 == version))
 		{
 			device_description_v2_t* anc = (device_description_v2_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v2_t));
 			if (NULL != anc)
@@ -663,6 +727,47 @@ static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t
 				anc->sw_patch_version = SW_PATCH_VERSION;
 
 				length = sizeof(device_description_v2_t);
+			}
+		}
+		else if (4 == version)
+		{
+			device_description_v4_t* anc = (device_description_v4_t*)comms_get_payload(an->comms, msg, sizeof(device_description_v4_t));
+			if (NULL != anc)
+			{
+				semver_t hwv = sigGetPlatformVersion();
+
+				anc->header = DEVA_DESCRIPTION;
+				anc->version = DEVICE_ANNOUNCEMENT_VERSION;
+				sigGetEui64((uint8_t*)anc->guid);
+				anc->boot_number = hton32(node_lifetime_boots());
+
+				sigGetPlatformUUID((uint8_t*)&(anc->platform));
+
+				anc->hw_major_version = hwv.major;
+				anc->hw_minor_version = hwv.minor;
+				anc->hw_assem_version = hwv.patch;
+
+				sigGetBoardManufacturerUUID((uint8_t*)&(anc->manufacturer));
+				anc->production = hton64(sigGetPlatformProductionTime());
+
+				anc->ident_timestamp = hton64(IDENT_TIMESTAMP);
+				anc->sw_major_version = SW_MAJOR_VERSION;
+				anc->sw_minor_version = SW_MINOR_VERSION;
+				anc->sw_patch_version = SW_PATCH_VERSION;
+
+				char bootloader_ver[BOOTLOADER_VER_STR_LEN] = {0};
+				uint8_t len = devp_bootloader_get(&bootloader_ver[0]);
+				if (len > 0)
+				{
+					memcpy(&bootloader_ver[0], anc->bootloader_ver, len);
+					debug1("Bootloader:%s", anc->bootloader_ver);
+				}
+				else
+				{
+					warn1("!Bootloader ver");
+				}
+
+				length = sizeof(device_description_v4_t);
 			}
 		}
 
