@@ -132,6 +132,35 @@ typedef nx_struct device_announcement_v3 {
 #pragma pack(pop)
 
 #pragma pack(push, 1)
+typedef nx_struct device_announcement_v4 {
+	nx_uint8_t header;				// 00 - packet type - device announcement
+	nx_uint8_t version;            	// 03 - Protocol version
+	nx_uint8_t guid[8];            	// Device EUI64
+	nx_uint32_t boot_number;       	// Current boot number
+
+	nx_time64_t boot_time;         	// Unix timestamp, seconds
+	nx_uint32_t lifetime;          	// Total uptime since production, potentially lossy, seconds
+	nx_uint32_t announcement;      	// Announcement number since boot
+
+	nx_uuid_t uuid;                	// Application UUID (general feature set)
+									// Diagnostic info
+	nx_uint32_t uptime;				// Uptime since boot, seconds
+	nx_uint32_t radio_sleep_time;	// Radio sleep time, seconds
+	nx_uint32_t cpu_sleep_time;		// CPU sleep time, seconds
+	nx_uint32_t battery;			// Battery voltage
+	
+	nx_uint8_t radio_channel;      	// Current primary radio channel of the device - 0 unknown / 255 hopping
+	nx_uint8_t radio_pan_id;		// Radio PAN ID
+
+	nx_uint32_t feature_list_hash;	// Hash of feature UUIDs
+
+	nx_uint16_t members[7];			// Cluster member ID-s
+
+} device_announcement_v4_t;
+// Total bytes 81
+#pragma pack(pop)
+
+#pragma pack(push, 1)
 typedef nx_struct device_request {
 	nx_uint8_t header;             // 0x10 or 0x11
 	nx_uint8_t version;            // Protocol version
@@ -188,7 +217,32 @@ typedef nx_struct device_description_v2 {
 // 2+8+4+16+3+16+8+8+3=68
 #pragma pack(pop)
 
-typedef device_announcement_v2_t device_announcement_t;
+#pragma pack(push, 1)
+typedef nx_struct device_description_v4 {
+	nx_uint8_t header;             // 00
+	nx_uint8_t version;            // Protocol version
+	nx_uint8_t guid[8];            // Device EUI64
+	nx_uint32_t boot_number;       // Current boot number
+
+	nx_uuid_t  platform;           // Platform UUID - platform is a combination of a BOARD and peripherals
+	nx_uint8_t hw_major_version;   // Platform HW version, major.
+	nx_uint8_t hw_minor_version;   // Platform HW version, minor.
+	nx_uint8_t hw_assem_version;   // Platform HW version, assembly.
+
+	nx_uuid_t manufacturer;        // Manufacturer UUID
+	nx_time64_t production;        // When the device was produced, unix timestamp, seconds
+
+	nx_time64_t ident_timestamp;   // Compilation time, unix timestamp, seconds
+	nx_uint8_t  sw_major_version;  // Firmware version, major.
+	nx_uint8_t  sw_minor_version;  // Firmware version, minor.
+	nx_uint8_t  sw_patch_version;  // Firmware version, patch.
+
+	nx_uint8_t bootloader_ver[BOOTLOADER_VER_STR_LEN]; // Bootloader version
+} device_description_v4_t;
+// 2+8+4+16+3+16+8+8+3+16=84
+#pragma pack(pop)
+
+typedef device_announcement_v3_t device_announcement_t;
 
 #pragma pack(push, 1)
 typedef nx_struct device_features {
