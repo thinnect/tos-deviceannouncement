@@ -18,7 +18,7 @@
 	#define DEVICE_ANNOUNCEMENT_VERSION    DEVICE_ANNOUNCEMENT_VERSION_V4
 #endif
 
-#define BOOTLOADER_VER_STR_LEN 20
+#define BOOTLOADER_VER_STR_LEN 30
 
 #include <time.h>
 #include "UniversallyUniqueIdentifier.h"
@@ -177,7 +177,7 @@ typedef nx_struct device_feature_request {
 
 #pragma pack(push, 1)
 typedef nx_struct device_description_v1 {
-	nx_uint8_t header;             // 00
+	nx_uint8_t header;             // 01
 	nx_uint8_t version;            // Protocol version
 	nx_uint8_t guid[8];            // Device EUI64
 	nx_uint32_t boot_number;       // Current boot number
@@ -196,7 +196,7 @@ typedef nx_struct device_description_v1 {
 
 #pragma pack(push, 1)
 typedef nx_struct device_description_v2 {
-	nx_uint8_t header;             // 00
+	nx_uint8_t header;             // 01
 	nx_uint8_t version;            // Protocol version
 	nx_uint8_t guid[8];            // Device EUI64
 	nx_uint32_t boot_number;       // Current boot number
@@ -219,8 +219,8 @@ typedef nx_struct device_description_v2 {
 
 #pragma pack(push, 1)
 typedef nx_struct device_description_v4 {
-	nx_uint8_t header;             // 00
-	nx_uint8_t version;            // Protocol version
+	nx_uint8_t header;             // 01
+	nx_uint8_t version;            // Protocol version - 04
 	nx_uint8_t guid[8];            // Device EUI64
 	nx_uint32_t boot_number;       // Current boot number
 
@@ -246,7 +246,7 @@ typedef device_announcement_v3_t device_announcement_t;
 
 #pragma pack(push, 1)
 typedef nx_struct device_features {
-	nx_uint8_t header;             // 00
+	nx_uint8_t header;             // 02
 	nx_uint8_t version;            // Protocol version
 	nx_uint8_t guid[8];            // Device EUI64
 	nx_uint32_t boot_number;       // Current boot number

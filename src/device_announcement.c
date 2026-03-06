@@ -755,16 +755,18 @@ static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t
 				anc->sw_minor_version = SW_MINOR_VERSION;
 				anc->sw_patch_version = SW_PATCH_VERSION;
 
-				char bootloader_ver[BOOTLOADER_VER_STR_LEN] = {0};
-				uint8_t len = devp_bootloader_get(&bootloader_ver[0]);
-				if (len > 0)
+				char bootloader_ver[BOOTLOADER_VER_STR_LEN];
+				memset(&bootloader_ver[0], 0x00, BOOTLOADER_VER_STR_LEN);
+				int len = devp_bootloader_get(&bootloader_ver[0]);
+				if ((len > 0) && (len < BOOTLOADER_VER_STR_LEN))
 				{
-					memcpy(&bootloader_ver[0], anc->bootloader_ver, len);
-					debug1("Bootloader:%s", anc->bootloader_ver);
+					memset(anc->bootloader_ver, 0x00, BOOTLOADER_VER_STR_LEN);
+					memcpy(anc->bootloader_ver, &bootloader_ver[0], len);
+					debug1("Bootloader:%s l:%d", anc->bootloader_ver, len);
 				}
 				else
 				{
-					warn1("!Bootloader ver");
+					warn1("!Bootloader ver: l:%d", len);
 				}
 
 				length = sizeof(device_description_v4_t);
