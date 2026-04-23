@@ -757,18 +757,18 @@ static comms_msg_t * describe(device_announcer_t* an, uint8_t version, am_addr_t
 
 				char bootloader_ver[BOOTLOADER_VER_STR_LEN];
 				memset(&bootloader_ver[0], 0x00, BOOTLOADER_VER_STR_LEN);
+				memset(anc->bootloader_ver, 0x00, BOOTLOADER_VER_STR_LEN);
 				int len = devp_bootloader_get(&bootloader_ver[0]);
 				if ((len > 0) && (len < BOOTLOADER_VER_STR_LEN))
 				{
-					memset(anc->bootloader_ver, 0x00, BOOTLOADER_VER_STR_LEN);
 					memcpy(anc->bootloader_ver, &bootloader_ver[0], len);
 					debug1("Bootloader:%s l:%d", anc->bootloader_ver, len);
 				}
 				else
 				{
-					warn1("!Bootloader ver: l:%d", len);
+					strcpy((char*)anc->bootloader_ver, "No bootloader");
+					debug1("No bootloader l:%d", len);
 				}
-
 				length = sizeof(device_description_v4_t);
 			}
 		}
